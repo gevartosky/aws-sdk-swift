@@ -2244,12 +2244,12 @@ private var smithySwiftDependency: Package.Dependency {
     } else if useLocalDeps {
         return .package(path: developmentPath)
     } else {
-       return .package(url: gitURL, exact: clientRuntimeVersion)
+       return .package(url: gitURL, branch: "main")
     }
 }
 
 private var crtDependency: Package.Dependency {
-   .package(url: "https://github.com/gevartosky/aws-crt-swift", exact: crtVersion)
+   .package(url: "https://github.com/gevartosky/aws-crt-swift", branch: "main")
 }
 
 private var doccDependencyOrNil: Package.Dependency? {
