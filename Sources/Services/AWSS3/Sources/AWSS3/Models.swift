@@ -34,6 +34,7 @@ import enum SmithyReadWrite.ReaderError
 @_spi(SmithyTimestamps) import enum SmithyTimestamps.TimestampFormat
 import func ClientRuntime.quoteHeaderValue
 @_spi(SmithyReadWrite) import protocol AWSClientRuntime.AWSS3ServiceError
+import protocol ClientRuntime.DefaultClientConfiguration
 import protocol ClientRuntime.HTTPError
 import protocol ClientRuntime.ModeledError
 import protocol Smithy.RequestMessageSerializer
@@ -44,7 +45,6 @@ import struct AWSClientRuntime.AWSS3ErrorWith200StatusXMLMiddleware
 import struct AWSClientRuntime.AmzSdkInvocationIdMiddleware
 import struct AWSClientRuntime.FlexibleChecksumsRequestMiddleware
 import struct AWSClientRuntime.FlexibleChecksumsResponseMiddleware
-@_spi(SmithyReadWrite) import struct AWSClientRuntime.RestXMLError
 @_spi(UnknownAWSHTTPServiceError) import struct AWSClientRuntime.UnknownAWSHTTPServiceError
 import struct AWSClientRuntime.UserAgentMiddleware
 import struct ClientRuntime.AuthSchemeMiddleware
@@ -55,6 +55,7 @@ import struct ClientRuntime.ContentTypeMiddleware
 import struct ClientRuntime.HeaderMiddleware
 import struct ClientRuntime.LoggerMiddleware
 import struct ClientRuntime.QueryItemMiddleware
+@_spi(SmithyReadWrite) import struct ClientRuntime.RestXMLError
 import struct ClientRuntime.SignerMiddleware
 import struct ClientRuntime.URLHostMiddleware
 import struct ClientRuntime.URLPathMiddleware
@@ -347,7 +348,7 @@ public struct NoSuchUpload: ClientRuntime.ModeledError, AWSClientRuntime.AWSS3Se
 
 extension S3ClientTypes {
 
-    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for corresponding charges to copy the object. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
+    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for the corresponding charges. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
     public enum RequestPayer: Swift.Sendable, Swift.Equatable, Swift.RawRepresentable, Swift.CaseIterable, Swift.Hashable {
         case requester
         case sdkUnknown(Swift.String)
@@ -383,7 +384,7 @@ public struct AbortMultipartUploadInput: Swift.Sendable {
     /// Key of the object for which the multipart upload was initiated.
     /// This member is required.
     public var key: Swift.String?
-    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for corresponding charges to copy the object. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
+    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for the corresponding charges. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
     public var requestPayer: S3ClientTypes.RequestPayer?
     /// Upload ID that identifies the multipart upload.
     /// This member is required.
@@ -689,6 +690,20 @@ extension S3ClientTypes {
     }
 }
 
+/// You might receive this error for several reasons. For details, see the description of this API operation.
+public struct AccessDenied: ClientRuntime.ModeledError, AWSClientRuntime.AWSS3ServiceError, ClientRuntime.HTTPError, Swift.Error, Swift.Sendable {
+    public static var typeName: Swift.String { "AccessDenied" }
+    public static var fault: ClientRuntime.ErrorFault { .client }
+    public static var isRetryable: Swift.Bool { false }
+    public static var isThrottling: Swift.Bool { false }
+    public internal(set) var httpResponse = SmithyHTTPAPI.HTTPResponse()
+    public internal(set) var message: Swift.String?
+    public internal(set) var requestID: Swift.String?
+    public internal(set) var requestID2: Swift.String?
+
+    public init() { }
+}
+
 extension S3ClientTypes {
 
     public enum ChecksumType: Swift.Sendable, Swift.Equatable, Swift.RawRepresentable, Swift.CaseIterable, Swift.Hashable {
@@ -805,7 +820,7 @@ public struct CompleteMultipartUploadInput: Swift.Sendable {
     public var mpuObjectSize: Swift.Int?
     /// The container for the multipart upload request information.
     public var multipartUpload: S3ClientTypes.CompletedMultipartUpload?
-    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for corresponding charges to copy the object. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
+    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for the corresponding charges. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
     public var requestPayer: S3ClientTypes.RequestPayer?
     /// The server-side encryption (SSE) algorithm used to encrypt the object. This parameter is required only when the object was created using a checksum algorithm or if your bucket policy requires the use of SSE-C. For more information, see [Protecting data using SSE-C keys](https://docs.aws.amazon.com/AmazonS3/latest/userguide/ServerSideEncryptionCustomerKeys.html#ssec-require-condition-key) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
     public var sseCustomerAlgorithm: Swift.String?
@@ -1368,7 +1383,7 @@ public struct CopyObjectInput: Swift.Sendable {
     public var objectLockMode: S3ClientTypes.ObjectLockMode?
     /// The date and time when you want the Object Lock of the object copy to expire. This functionality is not supported for directory buckets.
     public var objectLockRetainUntilDate: Foundation.Date?
-    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for corresponding charges to copy the object. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
+    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for the corresponding charges. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
     public var requestPayer: S3ClientTypes.RequestPayer?
     /// The server-side encryption algorithm used when storing this object in Amazon S3. Unrecognized or unsupported values won’t write a destination object and will receive a 400 Bad Request response. Amazon S3 automatically encrypts all new objects that are copied to an S3 bucket. When copying an object, if you don't specify encryption information in your copy request, the encryption setting of the target object is set to the default encryption configuration of the destination bucket. By default, all buckets have a base level of encryption configuration that uses server-side encryption with Amazon S3 managed keys (SSE-S3). If the destination bucket has a different default encryption configuration, Amazon S3 uses the corresponding encryption key to encrypt the target object copy. With server-side encryption, Amazon S3 encrypts your data as it writes your data to disks in its data centers and decrypts the data when you access it. For more information about server-side encryption, see [Using Server-Side Encryption](https://docs.aws.amazon.com/AmazonS3/latest/dev/serv-side-encryption.html) in the Amazon S3 User Guide. General purpose buckets
     ///
@@ -2557,7 +2572,7 @@ public struct CreateMultipartUploadInput: Swift.Sendable {
     public var objectLockMode: S3ClientTypes.ObjectLockMode?
     /// Specifies the date and time when you want the Object Lock to expire. This functionality is not supported for directory buckets.
     public var objectLockRetainUntilDate: Foundation.Date?
-    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for corresponding charges to copy the object. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
+    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for the corresponding charges. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
     public var requestPayer: S3ClientTypes.RequestPayer?
     /// The server-side encryption algorithm used when you store this object in Amazon S3 or Amazon FSx.
     ///
@@ -3154,7 +3169,7 @@ public struct DeleteObjectInput: Swift.Sendable {
     public var key: Swift.String?
     /// The concatenation of the authentication device's serial number, a space, and the value that is displayed on your authentication device. Required to permanently delete a versioned object if versioning is configured with MFA delete enabled. This functionality is not supported for directory buckets.
     public var mfa: Swift.String?
-    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for corresponding charges to copy the object. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
+    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for the corresponding charges. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
     public var requestPayer: S3ClientTypes.RequestPayer?
     /// Version ID used to reference a specific version of the object. For directory buckets in this API operation, only the null value of the version ID is supported.
     public var versionId: Swift.String?
@@ -3283,7 +3298,7 @@ public struct DeleteObjectsInput: Swift.Sendable {
     public var expectedBucketOwner: Swift.String?
     /// The concatenation of the authentication device's serial number, a space, and the value that is displayed on your authentication device. Required to permanently delete a versioned object if versioning is configured with MFA delete enabled. When performing the DeleteObjects operation on an MFA delete enabled bucket, which attempts to delete the specified versioned objects, you must include an MFA token. If you don't provide an MFA token, the entire request will fail, even if there are non-versioned objects that you are trying to delete. If you provide an invalid token, whether there are versioned object keys in the request or not, the entire Multi-Object Delete request will fail. For information about MFA Delete, see [ MFA Delete](https://docs.aws.amazon.com/AmazonS3/latest/dev/Versioning.html#MultiFactorAuthenticationDelete) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
     public var mfa: Swift.String?
-    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for corresponding charges to copy the object. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
+    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for the corresponding charges. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
     public var requestPayer: S3ClientTypes.RequestPayer?
 
     public init(
@@ -4516,7 +4531,7 @@ public struct GetBucketAccelerateConfigurationInput: Swift.Sendable {
     public var bucket: Swift.String?
     /// The account ID of the expected bucket owner. If the account ID that you provide does not match the actual owner of the bucket, the request fails with the HTTP status code 403 Forbidden (access denied).
     public var expectedBucketOwner: Swift.String?
-    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for corresponding charges to copy the object. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
+    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for the corresponding charges. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
     public var requestPayer: S3ClientTypes.RequestPayer?
 
     public init(
@@ -8052,7 +8067,7 @@ public struct GetObjectInput: Swift.Sendable {
     public var partNumber: Swift.Int?
     /// Downloads the specified byte range of an object. For more information about the HTTP Range header, see [https://www.rfc-editor.org/rfc/rfc9110.html#name-range](https://www.rfc-editor.org/rfc/rfc9110.html#name-range). Amazon S3 doesn't support retrieving multiple ranges of data per GET request.
     public var range: Swift.String?
-    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for corresponding charges to copy the object. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
+    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for the corresponding charges. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
     public var requestPayer: S3ClientTypes.RequestPayer?
     /// Sets the Cache-Control header of the response.
     public var responseCacheControl: Swift.String?
@@ -8378,7 +8393,7 @@ public struct GetObjectAclInput: Swift.Sendable {
     /// The key of the object for which to get the ACL information.
     /// This member is required.
     public var key: Swift.String?
-    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for corresponding charges to copy the object. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
+    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for the corresponding charges. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
     public var requestPayer: S3ClientTypes.RequestPayer?
     /// Version ID used to reference a specific version of the object. This functionality is not supported for directory buckets.
     public var versionId: Swift.String?
@@ -8471,7 +8486,7 @@ public struct GetObjectAttributesInput: Swift.Sendable {
     public var objectAttributes: [S3ClientTypes.ObjectAttributes]?
     /// Specifies the part after which listing should begin. Only parts with higher part numbers will be listed. For more information, see [Uploading and copying objects using multipart upload in Amazon S3 ](https://docs.aws.amazon.com/AmazonS3/latest/userguide/mpuoverview.html) in the Amazon Simple Storage Service user guide.
     public var partNumberMarker: Swift.String?
-    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for corresponding charges to copy the object. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
+    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for the corresponding charges. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
     public var requestPayer: S3ClientTypes.RequestPayer?
     /// Specifies the algorithm to use when encrypting the object (for example, AES256). This functionality is not supported for directory buckets.
     public var sseCustomerAlgorithm: Swift.String?
@@ -8679,7 +8694,7 @@ public struct GetObjectLegalHoldInput: Swift.Sendable {
     /// The key name for the object whose legal hold status you want to retrieve.
     /// This member is required.
     public var key: Swift.String?
-    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for corresponding charges to copy the object. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
+    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for the corresponding charges. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
     public var requestPayer: S3ClientTypes.RequestPayer?
     /// The version ID of the object whose legal hold status you want to retrieve.
     public var versionId: Swift.String?
@@ -8877,7 +8892,7 @@ public struct GetObjectRetentionInput: Swift.Sendable {
     /// The key name for the object whose retention settings you want to retrieve.
     /// This member is required.
     public var key: Swift.String?
-    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for corresponding charges to copy the object. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
+    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for the corresponding charges. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
     public var requestPayer: S3ClientTypes.RequestPayer?
     /// The version ID for the object whose retention settings you want to retrieve.
     public var versionId: Swift.String?
@@ -8936,7 +8951,7 @@ public struct GetObjectTaggingInput: Swift.Sendable {
     /// Object key for which to get the tagging information.
     /// This member is required.
     public var key: Swift.String?
-    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for corresponding charges to copy the object. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
+    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for the corresponding charges. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
     public var requestPayer: S3ClientTypes.RequestPayer?
     /// The versionId of the object for which to get the tagging information.
     public var versionId: Swift.String?
@@ -8981,7 +8996,7 @@ public struct GetObjectTorrentInput: Swift.Sendable {
     /// The object key for which to get the information.
     /// This member is required.
     public var key: Swift.String?
-    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for corresponding charges to copy the object. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
+    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for the corresponding charges. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
     public var requestPayer: S3ClientTypes.RequestPayer?
 
     public init(
@@ -9183,7 +9198,7 @@ public struct HeadObjectInput: Swift.Sendable {
     public var partNumber: Swift.Int?
     /// HeadObject returns only the metadata for an object. If the Range is satisfiable, only the ContentLength is affected in the response. If the Range is not satisfiable, S3 returns a 416 - Requested Range Not Satisfiable error.
     public var range: Swift.String?
-    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for corresponding charges to copy the object. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
+    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for the corresponding charges. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
     public var requestPayer: S3ClientTypes.RequestPayer?
     /// Sets the Cache-Control header of the response.
     public var responseCacheControl: Swift.String?
@@ -9782,7 +9797,7 @@ public struct ListMultipartUploadsInput: Swift.Sendable {
     public var maxUploads: Swift.Int?
     /// Lists in-progress uploads only for those keys that begin with the specified prefix. You can use prefixes to separate a bucket into different grouping of keys. (You can think of using prefix to make groups in the same way that you'd use a folder in a file system.) Directory buckets - For directory buckets, only prefixes that end in a delimiter (/) are supported.
     public var `prefix`: Swift.String?
-    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for corresponding charges to copy the object. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
+    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for the corresponding charges. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
     public var requestPayer: S3ClientTypes.RequestPayer?
     /// Together with key-marker, specifies the multipart upload after which listing should begin. If key-marker is not specified, the upload-id-marker parameter is ignored. Otherwise, any multipart uploads for a key equal to the key-marker might be included in the list only if they have an upload ID lexicographically greater than the specified upload-id-marker. This functionality is not supported for directory buckets.
     public var uploadIdMarker: Swift.String?
@@ -10341,7 +10356,7 @@ public struct ListObjectVersionsInput: Swift.Sendable {
     public var optionalObjectAttributes: [S3ClientTypes.OptionalObjectAttributes]?
     /// Use this parameter to select only those keys that begin with the specified prefix. You can use prefixes to separate a bucket into different groupings of keys. (You can think of using prefix to make groups in the same way that you'd use a folder in a file system.) You can use prefix with delimiter to roll up numerous objects into a single result under CommonPrefixes.
     public var `prefix`: Swift.String?
-    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for corresponding charges to copy the object. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
+    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for the corresponding charges. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
     public var requestPayer: S3ClientTypes.RequestPayer?
     /// Specifies the object version you want to start listing from.
     public var versionIdMarker: Swift.String?
@@ -10559,7 +10574,7 @@ public struct ListPartsInput: Swift.Sendable {
     public var maxParts: Swift.Int?
     /// Specifies the part after which listing should begin. Only parts with higher part numbers will be listed.
     public var partNumberMarker: Swift.String?
-    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for corresponding charges to copy the object. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
+    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for the corresponding charges. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
     public var requestPayer: S3ClientTypes.RequestPayer?
     /// The server-side encryption (SSE) algorithm used to encrypt the object. This parameter is needed only when the object was created using a checksum algorithm. For more information, see [Protecting data using SSE-C keys](https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
     public var sseCustomerAlgorithm: Swift.String?
@@ -11517,13 +11532,7 @@ public struct EncryptionTypeMismatch: ClientRuntime.ModeledError, AWSClientRunti
     public init() { }
 }
 
-/// You may receive this error in multiple cases. Depending on the reason for the error, you may receive one of the messages below:
-///
-/// * Cannot specify both a write offset value and user-defined object metadata for existing objects.
-///
-/// * Checksum Type mismatch occurred, expected checksum Type: sha1, actual checksum Type: crc32c.
-///
-/// * Request body cannot be empty when 'write offset' is specified.
+/// A parameter or header in your request isn't valid. For details, see the description of this API operation.
 public struct InvalidRequest: ClientRuntime.ModeledError, AWSClientRuntime.AWSS3ServiceError, ClientRuntime.HTTPError, Swift.Error, Swift.Sendable {
     public static var typeName: Swift.String { "InvalidRequest" }
     public static var fault: ClientRuntime.ErrorFault { .client }
@@ -11661,7 +11670,7 @@ public struct PutObjectInput: Swift.Sendable {
     public var objectLockMode: S3ClientTypes.ObjectLockMode?
     /// The date and time when you want this object's Object Lock to expire. Must be formatted as a timestamp parameter. This functionality is not supported for directory buckets.
     public var objectLockRetainUntilDate: Foundation.Date?
-    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for corresponding charges to copy the object. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
+    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for the corresponding charges. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
     public var requestPayer: S3ClientTypes.RequestPayer?
     /// The server-side encryption algorithm that was used when you store this object in Amazon S3 or Amazon FSx.
     ///
@@ -11893,7 +11902,7 @@ public struct PutObjectAclInput: Swift.Sendable {
     /// Key for which the PUT action was initiated.
     /// This member is required.
     public var key: Swift.String?
-    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for corresponding charges to copy the object. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
+    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for the corresponding charges. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
     public var requestPayer: S3ClientTypes.RequestPayer?
     /// Version ID used to reference a specific version of the object. This functionality is not supported for directory buckets.
     public var versionId: Swift.String?
@@ -11957,7 +11966,7 @@ public struct PutObjectLegalHoldInput: Swift.Sendable {
     public var key: Swift.String?
     /// Container element for the legal hold configuration you want to apply to the specified object.
     public var legalHold: S3ClientTypes.ObjectLockLegalHold?
-    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for corresponding charges to copy the object. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
+    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for the corresponding charges. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
     public var requestPayer: S3ClientTypes.RequestPayer?
     /// The version ID of the object that you want to place a legal hold on.
     public var versionId: Swift.String?
@@ -12006,7 +12015,7 @@ public struct PutObjectLockConfigurationInput: Swift.Sendable {
     public var expectedBucketOwner: Swift.String?
     /// The Object Lock configuration that you want to apply to the specified bucket.
     public var objectLockConfiguration: S3ClientTypes.ObjectLockConfiguration?
-    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for corresponding charges to copy the object. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
+    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for the corresponding charges. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
     public var requestPayer: S3ClientTypes.RequestPayer?
     /// A token to allow Object Lock to be enabled for an existing bucket.
     public var token: Swift.String?
@@ -12056,7 +12065,7 @@ public struct PutObjectRetentionInput: Swift.Sendable {
     /// The key name for the object that you want to apply this Object Retention configuration to.
     /// This member is required.
     public var key: Swift.String?
-    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for corresponding charges to copy the object. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
+    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for the corresponding charges. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
     public var requestPayer: S3ClientTypes.RequestPayer?
     /// The container element for the Object Retention configuration.
     public var retention: S3ClientTypes.ObjectLockRetention?
@@ -12846,7 +12855,7 @@ public struct RestoreObjectInput: Swift.Sendable {
     /// Object key for which the action was initiated.
     /// This member is required.
     public var key: Swift.String?
-    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for corresponding charges to copy the object. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
+    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for the corresponding charges. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
     public var requestPayer: S3ClientTypes.RequestPayer?
     /// Container for restore job parameters.
     public var restoreRequest: S3ClientTypes.RestoreRequest?
@@ -13226,6 +13235,94 @@ public struct UpdateBucketMetadataJournalTableConfigurationInput: Swift.Sendable
     }
 }
 
+extension S3ClientTypes {
+
+    /// If SSEKMS is specified for ObjectEncryption, this data type specifies the Amazon Web Services KMS key Amazon Resource Name (ARN) to use and whether to use an S3 Bucket Key for server-side encryption using Key Management Service (KMS) keys (SSE-KMS).
+    public struct SSEKMSEncryption: Swift.Sendable {
+        /// Specifies whether Amazon S3 should use an S3 Bucket Key for object encryption with server-side encryption using Key Management Service (KMS) keys (SSE-KMS). If this value isn't specified, it defaults to false. Setting this value to true causes Amazon S3 to use an S3 Bucket Key for object encryption with SSE-KMS. For more information, see [ Using Amazon S3 Bucket Keys](https://docs.aws.amazon.com/AmazonS3/latest/userguide/bucket-key.html) in the Amazon S3 User Guide. Valid Values: true | false
+        public var bucketKeyEnabled: Swift.Bool?
+        /// Specifies the Amazon Web Services KMS key Amazon Resource Name (ARN) to use for the updated server-side encryption type. Required if ObjectEncryption specifies SSEKMS. You must specify the full Amazon Web Services KMS key ARN. The KMS key ID and KMS key alias aren't supported. Pattern: (arn:aws[-a-z0-9]*:kms:[-a-z0-9]*:[0-9]{12}:key/.+)
+        /// This member is required.
+        public var kmsKeyArn: Swift.String?
+
+        public init(
+            bucketKeyEnabled: Swift.Bool? = nil,
+            kmsKeyArn: Swift.String? = nil
+        ) {
+            self.bucketKeyEnabled = bucketKeyEnabled
+            self.kmsKeyArn = kmsKeyArn
+        }
+    }
+}
+
+extension S3ClientTypes.SSEKMSEncryption: Swift.CustomDebugStringConvertible {
+    public var debugDescription: Swift.String {
+        "SSEKMSEncryption(bucketKeyEnabled: \(Swift.String(describing: bucketKeyEnabled)), kmsKeyArn: \"CONTENT_REDACTED\")"}
+}
+
+extension S3ClientTypes {
+
+    /// The updated server-side encryption type for this object. The UpdateObjectEncryption operation supports the SSE-S3 and SSE-KMS encryption types. Valid Values: SSES3 | SSEKMS
+    public enum ObjectEncryption: Swift.Sendable {
+        /// Specifies to update the object encryption type to server-side encryption with Key Management Service (KMS) keys (SSE-KMS).
+        case ssekms(S3ClientTypes.SSEKMSEncryption)
+        case sdkUnknown(Swift.String)
+    }
+}
+
+public struct UpdateObjectEncryptionInput: Swift.Sendable {
+    /// The name of the general purpose bucket that contains the specified object key name. When you use this operation with an access point attached to a general purpose bucket, you must either provide the alias of the access point in place of the bucket name or you must specify the access point Amazon Resource Name (ARN). When using the access point ARN, you must direct requests to the access point hostname. The access point hostname takes the form  AccessPointName-AccountId.s3-accesspoint.Region.amazonaws.com. When using this operation with an access point through the Amazon Web Services SDKs, you provide the access point ARN in place of the bucket name. For more information about access point ARNs, see [ Referencing access points](https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-points-naming.html) in the Amazon S3 User Guide.
+    /// This member is required.
+    public var bucket: Swift.String?
+    /// Indicates the algorithm used to create the checksum for the object when you use an Amazon Web Services SDK. This header doesn't provide any additional functionality if you don't use the SDK. When you send this header, there must be a corresponding x-amz-checksum or x-amz-trailer header sent. Otherwise, Amazon S3 fails the request with the HTTP status code 400 Bad Request. For more information, see [ Checking object integrity ](https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide. If you provide an individual checksum, Amazon S3 ignores any provided ChecksumAlgorithm parameter.
+    public var checksumAlgorithm: S3ClientTypes.ChecksumAlgorithm?
+    /// The MD5 hash for the request body. For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.
+    public var contentMD5: Swift.String?
+    /// The account ID of the expected bucket owner. If the account ID that you provide doesn't match the actual owner of the bucket, the request fails with the HTTP status code 403 Forbidden (access denied).
+    public var expectedBucketOwner: Swift.String?
+    /// The key name of the object that you want to update the server-side encryption type for.
+    /// This member is required.
+    public var key: Swift.String?
+    /// The updated server-side encryption type for this object. The UpdateObjectEncryption operation supports the SSE-S3 and SSE-KMS encryption types. Valid Values: SSES3 | SSEKMS
+    /// This member is required.
+    public var objectEncryption: S3ClientTypes.ObjectEncryption?
+    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for the corresponding charges. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
+    public var requestPayer: S3ClientTypes.RequestPayer?
+    /// The version ID of the object that you want to update the server-side encryption type for.
+    public var versionId: Swift.String?
+
+    public init(
+        bucket: Swift.String? = nil,
+        checksumAlgorithm: S3ClientTypes.ChecksumAlgorithm? = nil,
+        contentMD5: Swift.String? = nil,
+        expectedBucketOwner: Swift.String? = nil,
+        key: Swift.String? = nil,
+        objectEncryption: S3ClientTypes.ObjectEncryption? = nil,
+        requestPayer: S3ClientTypes.RequestPayer? = nil,
+        versionId: Swift.String? = nil
+    ) {
+        self.bucket = bucket
+        self.checksumAlgorithm = checksumAlgorithm
+        self.contentMD5 = contentMD5
+        self.expectedBucketOwner = expectedBucketOwner
+        self.key = key
+        self.objectEncryption = objectEncryption
+        self.requestPayer = requestPayer
+        self.versionId = versionId
+    }
+}
+
+public struct UpdateObjectEncryptionOutput: Swift.Sendable {
+    /// If present, indicates that the requester was successfully charged for the request. For more information, see [Using Requester Pays buckets for storage transfers and usage](https://docs.aws.amazon.com/AmazonS3/latest/userguide/RequesterPaysBuckets.html) in the Amazon Simple Storage Service user guide. This functionality is not supported for directory buckets.
+    public var requestCharged: S3ClientTypes.RequestCharged?
+
+    public init(
+        requestCharged: S3ClientTypes.RequestCharged? = nil
+    ) {
+        self.requestCharged = requestCharged
+    }
+}
+
 public struct UploadPartInput: Swift.Sendable {
     /// Object data.
     public var body: Smithy.ByteStream?
@@ -13256,7 +13353,7 @@ public struct UploadPartInput: Swift.Sendable {
     /// Part number of part being uploaded. This is a positive integer between 1 and 10,000.
     /// This member is required.
     public var partNumber: Swift.Int?
-    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for corresponding charges to copy the object. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
+    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for the corresponding charges. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
     public var requestPayer: S3ClientTypes.RequestPayer?
     /// Specifies the algorithm to use when encrypting the object (for example, AES256). This functionality is not supported for directory buckets.
     public var sseCustomerAlgorithm: Swift.String?
@@ -13421,7 +13518,7 @@ public struct UploadPartCopyInput: Swift.Sendable {
     /// Part number of part being copied. This is a positive integer between 1 and 10,000.
     /// This member is required.
     public var partNumber: Swift.Int?
-    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for corresponding charges to copy the object. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
+    /// Confirms that the requester knows that they will be charged for the request. Bucket owners need not specify this parameter in their requests. If either the source or destination S3 bucket has Requester Pays enabled, the requester will pay for the corresponding charges. For information about downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html) in the Amazon S3 User Guide. This functionality is not supported for directory buckets.
     public var requestPayer: S3ClientTypes.RequestPayer?
     /// Specifies the algorithm to use when encrypting the object (for example, AES256). This functionality is not supported when the destination bucket is a directory bucket.
     public var sseCustomerAlgorithm: Swift.String?
@@ -17759,6 +17856,49 @@ extension UpdateBucketMetadataJournalTableConfigurationInput {
     }
 }
 
+extension UpdateObjectEncryptionInput {
+
+    static func urlPathProvider(_ value: UpdateObjectEncryptionInput) -> Swift.String? {
+        guard let key = value.key else {
+            return nil
+        }
+        return "/\(key.urlPercentEncoding(encodeForwardSlash: false))"
+    }
+}
+
+extension UpdateObjectEncryptionInput {
+
+    static func headerProvider(_ value: UpdateObjectEncryptionInput) -> SmithyHTTPAPI.Headers {
+        var items = SmithyHTTPAPI.Headers()
+        if let checksumAlgorithm = value.checksumAlgorithm {
+            items.add(SmithyHTTPAPI.Header(name: "x-amz-sdk-checksum-algorithm", value: Swift.String(checksumAlgorithm.rawValue)))
+        }
+        if let contentMD5 = value.contentMD5 {
+            items.add(SmithyHTTPAPI.Header(name: "Content-MD5", value: Swift.String(contentMD5)))
+        }
+        if let expectedBucketOwner = value.expectedBucketOwner {
+            items.add(SmithyHTTPAPI.Header(name: "x-amz-expected-bucket-owner", value: Swift.String(expectedBucketOwner)))
+        }
+        if let requestPayer = value.requestPayer {
+            items.add(SmithyHTTPAPI.Header(name: "x-amz-request-payer", value: Swift.String(requestPayer.rawValue)))
+        }
+        return items
+    }
+}
+
+extension UpdateObjectEncryptionInput {
+
+    static func queryItemProvider(_ value: UpdateObjectEncryptionInput) throws -> [Smithy.URIQueryItem] {
+        var items = [Smithy.URIQueryItem]()
+        items.append(Smithy.URIQueryItem(name: "encryption", value: nil))
+        if let versionId = value.versionId {
+            let versionIdQueryItem = Smithy.URIQueryItem(name: "versionId".urlPercentEncoding(), value: Swift.String(versionId).urlPercentEncoding())
+            items.append(versionIdQueryItem)
+        }
+        return items
+    }
+}
+
 extension UploadPartInput {
 
     static func urlPathProvider(_ value: UploadPartInput) -> Swift.String? {
@@ -18341,6 +18481,14 @@ extension UpdateBucketMetadataJournalTableConfigurationInput {
     static func write(value: UpdateBucketMetadataJournalTableConfigurationInput?, to writer: SmithyXML.Writer) throws {
         guard let value else { return }
         try writer["JournalTableConfiguration"].write(value.journalTableConfiguration, with: S3ClientTypes.JournalTableConfigurationUpdates.write(value:to:))
+    }
+}
+
+extension UpdateObjectEncryptionInput {
+
+    static func write(value: UpdateObjectEncryptionInput?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["ObjectEncryption"].write(value.objectEncryption, with: S3ClientTypes.ObjectEncryption.write(value:to:))
     }
 }
 
@@ -19942,6 +20090,17 @@ extension UpdateBucketMetadataJournalTableConfigurationOutput {
     }
 }
 
+extension UpdateObjectEncryptionOutput {
+
+    static func httpOutput(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> UpdateObjectEncryptionOutput {
+        var value = UpdateObjectEncryptionOutput()
+        if let requestChargedHeaderValue = httpResponse.headers.value(for: "x-amz-request-charged") {
+            value.requestCharged = S3ClientTypes.RequestCharged(rawValue: requestChargedHeaderValue)
+        }
+        return value
+    }
+}
+
 extension UploadPartOutput {
 
     static func httpOutput(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> UploadPartOutput {
@@ -20026,7 +20185,7 @@ extension WriteGetObjectResponseOutput {
     }
 }
 
-func httpServiceError(baseError: AWSClientRuntime.RestXMLError) throws -> Swift.Error? {
+func httpServiceError(baseError: ClientRuntime.RestXMLError) throws -> Swift.Error? {
     if baseError.httpResponse.statusCode == .notFound && baseError.httpResponse.body.isEmpty {
         return try NotFound.makeError(baseError: baseError)
     }
@@ -20038,7 +20197,7 @@ enum AbortMultipartUploadOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20053,7 +20212,7 @@ enum CompleteMultipartUploadOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20067,7 +20226,7 @@ enum CopyObjectOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20082,7 +20241,7 @@ enum CreateBucketOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20098,7 +20257,7 @@ enum CreateBucketMetadataConfigurationOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20112,7 +20271,7 @@ enum CreateBucketMetadataTableConfigurationOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20126,7 +20285,7 @@ enum CreateMultipartUploadOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20140,7 +20299,7 @@ enum CreateSessionOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20155,7 +20314,7 @@ enum DeleteBucketOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20169,7 +20328,7 @@ enum DeleteBucketAnalyticsConfigurationOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20183,7 +20342,7 @@ enum DeleteBucketCorsOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20197,7 +20356,7 @@ enum DeleteBucketEncryptionOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20211,7 +20370,7 @@ enum DeleteBucketIntelligentTieringConfigurationOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20225,7 +20384,7 @@ enum DeleteBucketInventoryConfigurationOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20239,7 +20398,7 @@ enum DeleteBucketLifecycleOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20253,7 +20412,7 @@ enum DeleteBucketMetadataConfigurationOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20267,7 +20426,7 @@ enum DeleteBucketMetadataTableConfigurationOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20281,7 +20440,7 @@ enum DeleteBucketMetricsConfigurationOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20295,7 +20454,7 @@ enum DeleteBucketOwnershipControlsOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20309,7 +20468,7 @@ enum DeleteBucketPolicyOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20323,7 +20482,7 @@ enum DeleteBucketReplicationOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20337,7 +20496,7 @@ enum DeleteBucketTaggingOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20351,7 +20510,7 @@ enum DeleteBucketWebsiteOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20365,7 +20524,7 @@ enum DeleteObjectOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20379,7 +20538,7 @@ enum DeleteObjectsOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20393,7 +20552,7 @@ enum DeleteObjectTaggingOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20407,7 +20566,7 @@ enum DeletePublicAccessBlockOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20421,7 +20580,7 @@ enum GetBucketAbacOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20435,7 +20594,7 @@ enum GetBucketAccelerateConfigurationOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20449,7 +20608,7 @@ enum GetBucketAclOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20463,7 +20622,7 @@ enum GetBucketAnalyticsConfigurationOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20477,7 +20636,7 @@ enum GetBucketCorsOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20491,7 +20650,7 @@ enum GetBucketEncryptionOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20505,7 +20664,7 @@ enum GetBucketIntelligentTieringConfigurationOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20519,7 +20678,7 @@ enum GetBucketInventoryConfigurationOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20533,7 +20692,7 @@ enum GetBucketLifecycleConfigurationOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20547,7 +20706,7 @@ enum GetBucketLocationOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20561,7 +20720,7 @@ enum GetBucketLoggingOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20575,7 +20734,7 @@ enum GetBucketMetadataConfigurationOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20589,7 +20748,7 @@ enum GetBucketMetadataTableConfigurationOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20603,7 +20762,7 @@ enum GetBucketMetricsConfigurationOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20617,7 +20776,7 @@ enum GetBucketNotificationConfigurationOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20631,7 +20790,7 @@ enum GetBucketOwnershipControlsOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20645,7 +20804,7 @@ enum GetBucketPolicyOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20659,7 +20818,7 @@ enum GetBucketPolicyStatusOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20673,7 +20832,7 @@ enum GetBucketReplicationOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20687,7 +20846,7 @@ enum GetBucketRequestPaymentOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20701,7 +20860,7 @@ enum GetBucketTaggingOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20715,7 +20874,7 @@ enum GetBucketVersioningOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20729,7 +20888,7 @@ enum GetBucketWebsiteOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20743,7 +20902,7 @@ enum GetObjectOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20759,7 +20918,7 @@ enum GetObjectAclOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20774,7 +20933,7 @@ enum GetObjectAttributesOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20789,7 +20948,7 @@ enum GetObjectLegalHoldOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20803,7 +20962,7 @@ enum GetObjectLockConfigurationOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20817,7 +20976,7 @@ enum GetObjectRetentionOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20831,7 +20990,7 @@ enum GetObjectTaggingOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20845,7 +21004,7 @@ enum GetObjectTorrentOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20859,7 +21018,7 @@ enum GetPublicAccessBlockOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20873,7 +21032,7 @@ enum HeadBucketOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20888,7 +21047,7 @@ enum HeadObjectOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20903,7 +21062,7 @@ enum ListBucketAnalyticsConfigurationsOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20917,7 +21076,7 @@ enum ListBucketIntelligentTieringConfigurationsOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20931,7 +21090,7 @@ enum ListBucketInventoryConfigurationsOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20945,7 +21104,7 @@ enum ListBucketMetricsConfigurationsOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20959,7 +21118,7 @@ enum ListBucketsOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20973,7 +21132,7 @@ enum ListDirectoryBucketsOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -20987,7 +21146,7 @@ enum ListMultipartUploadsOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -21001,7 +21160,7 @@ enum ListObjectsOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -21016,7 +21175,7 @@ enum ListObjectsV2OutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -21031,7 +21190,7 @@ enum ListObjectVersionsOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -21045,7 +21204,7 @@ enum ListPartsOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -21059,7 +21218,7 @@ enum PutBucketAbacOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -21073,7 +21232,7 @@ enum PutBucketAccelerateConfigurationOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -21087,7 +21246,7 @@ enum PutBucketAclOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -21101,7 +21260,7 @@ enum PutBucketAnalyticsConfigurationOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -21115,7 +21274,7 @@ enum PutBucketCorsOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -21129,7 +21288,7 @@ enum PutBucketEncryptionOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -21143,7 +21302,7 @@ enum PutBucketIntelligentTieringConfigurationOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -21157,7 +21316,7 @@ enum PutBucketInventoryConfigurationOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -21171,7 +21330,7 @@ enum PutBucketLifecycleConfigurationOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -21185,7 +21344,7 @@ enum PutBucketLoggingOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -21199,7 +21358,7 @@ enum PutBucketMetricsConfigurationOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -21213,7 +21372,7 @@ enum PutBucketNotificationConfigurationOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -21227,7 +21386,7 @@ enum PutBucketOwnershipControlsOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -21241,7 +21400,7 @@ enum PutBucketPolicyOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -21255,7 +21414,7 @@ enum PutBucketReplicationOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -21269,7 +21428,7 @@ enum PutBucketRequestPaymentOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -21283,7 +21442,7 @@ enum PutBucketTaggingOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -21297,7 +21456,7 @@ enum PutBucketVersioningOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -21311,7 +21470,7 @@ enum PutBucketWebsiteOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -21325,7 +21484,7 @@ enum PutObjectOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -21343,7 +21502,7 @@ enum PutObjectAclOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -21358,7 +21517,7 @@ enum PutObjectLegalHoldOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -21372,7 +21531,7 @@ enum PutObjectLockConfigurationOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -21386,7 +21545,7 @@ enum PutObjectRetentionOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -21400,7 +21559,7 @@ enum PutObjectTaggingOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -21414,7 +21573,7 @@ enum PutPublicAccessBlockOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -21428,7 +21587,7 @@ enum RenameObjectOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -21443,7 +21602,7 @@ enum RestoreObjectOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -21458,7 +21617,7 @@ enum SelectObjectContentOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -21472,7 +21631,7 @@ enum UpdateBucketMetadataInventoryTableConfigurationOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -21486,10 +21645,27 @@ enum UpdateBucketMetadataJournalTableConfigurationOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
+            default: return try AWSClientRuntime.UnknownAWSHTTPServiceError.makeError(baseError: baseError)
+        }
+    }
+}
+
+enum UpdateObjectEncryptionOutputError {
+
+    static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
+        let data = try await httpResponse.data()
+        let responseReader = try SmithyXML.Reader.from(data: data)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        if let error = baseError.customError() { return error }
+        if let error = try httpServiceError(baseError: baseError) { return error }
+        switch baseError.code {
+            case "AccessDenied": return try AccessDenied.makeError(baseError: baseError)
+            case "InvalidRequest": return try InvalidRequest.makeError(baseError: baseError)
+            case "NoSuchKey": return try NoSuchKey.makeError(baseError: baseError)
             default: return try AWSClientRuntime.UnknownAWSHTTPServiceError.makeError(baseError: baseError)
         }
     }
@@ -21500,7 +21676,7 @@ enum UploadPartOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -21514,7 +21690,7 @@ enum UploadPartCopyOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -21528,7 +21704,7 @@ enum WriteGetObjectResponseOutputError {
     static func httpError(from httpResponse: SmithyHTTPAPI.HTTPResponse) async throws -> Swift.Error {
         let data = try await httpResponse.data()
         let responseReader = try SmithyXML.Reader.from(data: data)
-        let baseError = try AWSClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
+        let baseError = try ClientRuntime.RestXMLError(httpResponse: httpResponse, responseReader: responseReader, noErrorWrapping: true)
         if let error = baseError.customError() { return error }
         if let error = try httpServiceError(baseError: baseError) { return error }
         switch baseError.code {
@@ -21539,7 +21715,7 @@ enum WriteGetObjectResponseOutputError {
 
 extension NoSuchUpload {
 
-    static func makeError(baseError: AWSClientRuntime.RestXMLError) throws -> NoSuchUpload {
+    static func makeError(baseError: ClientRuntime.RestXMLError) throws -> NoSuchUpload {
         var value = NoSuchUpload()
         value.httpResponse = baseError.httpResponse
         value.requestID = baseError.requestID
@@ -21551,7 +21727,7 @@ extension NoSuchUpload {
 
 extension ObjectNotInActiveTierError {
 
-    static func makeError(baseError: AWSClientRuntime.RestXMLError) throws -> ObjectNotInActiveTierError {
+    static func makeError(baseError: ClientRuntime.RestXMLError) throws -> ObjectNotInActiveTierError {
         var value = ObjectNotInActiveTierError()
         value.httpResponse = baseError.httpResponse
         value.requestID = baseError.requestID
@@ -21563,7 +21739,7 @@ extension ObjectNotInActiveTierError {
 
 extension BucketAlreadyExists {
 
-    static func makeError(baseError: AWSClientRuntime.RestXMLError) throws -> BucketAlreadyExists {
+    static func makeError(baseError: ClientRuntime.RestXMLError) throws -> BucketAlreadyExists {
         var value = BucketAlreadyExists()
         value.httpResponse = baseError.httpResponse
         value.requestID = baseError.requestID
@@ -21575,7 +21751,7 @@ extension BucketAlreadyExists {
 
 extension BucketAlreadyOwnedByYou {
 
-    static func makeError(baseError: AWSClientRuntime.RestXMLError) throws -> BucketAlreadyOwnedByYou {
+    static func makeError(baseError: ClientRuntime.RestXMLError) throws -> BucketAlreadyOwnedByYou {
         var value = BucketAlreadyOwnedByYou()
         value.httpResponse = baseError.httpResponse
         value.requestID = baseError.requestID
@@ -21587,7 +21763,7 @@ extension BucketAlreadyOwnedByYou {
 
 extension NoSuchBucket {
 
-    static func makeError(baseError: AWSClientRuntime.RestXMLError) throws -> NoSuchBucket {
+    static func makeError(baseError: ClientRuntime.RestXMLError) throws -> NoSuchBucket {
         var value = NoSuchBucket()
         value.httpResponse = baseError.httpResponse
         value.requestID = baseError.requestID
@@ -21599,7 +21775,7 @@ extension NoSuchBucket {
 
 extension InvalidObjectState {
 
-    static func makeError(baseError: AWSClientRuntime.RestXMLError) throws -> InvalidObjectState {
+    static func makeError(baseError: ClientRuntime.RestXMLError) throws -> InvalidObjectState {
         let reader = baseError.errorBodyReader
         var value = InvalidObjectState()
         value.properties.accessTier = try reader["AccessTier"].readIfPresent()
@@ -21614,7 +21790,7 @@ extension InvalidObjectState {
 
 extension NoSuchKey {
 
-    static func makeError(baseError: AWSClientRuntime.RestXMLError) throws -> NoSuchKey {
+    static func makeError(baseError: ClientRuntime.RestXMLError) throws -> NoSuchKey {
         var value = NoSuchKey()
         value.httpResponse = baseError.httpResponse
         value.requestID = baseError.requestID
@@ -21626,7 +21802,7 @@ extension NoSuchKey {
 
 extension NotFound {
 
-    static func makeError(baseError: AWSClientRuntime.RestXMLError) throws -> NotFound {
+    static func makeError(baseError: ClientRuntime.RestXMLError) throws -> NotFound {
         var value = NotFound()
         value.httpResponse = baseError.httpResponse
         value.requestID = baseError.requestID
@@ -21638,7 +21814,7 @@ extension NotFound {
 
 extension EncryptionTypeMismatch {
 
-    static func makeError(baseError: AWSClientRuntime.RestXMLError) throws -> EncryptionTypeMismatch {
+    static func makeError(baseError: ClientRuntime.RestXMLError) throws -> EncryptionTypeMismatch {
         var value = EncryptionTypeMismatch()
         value.httpResponse = baseError.httpResponse
         value.requestID = baseError.requestID
@@ -21650,7 +21826,7 @@ extension EncryptionTypeMismatch {
 
 extension InvalidRequest {
 
-    static func makeError(baseError: AWSClientRuntime.RestXMLError) throws -> InvalidRequest {
+    static func makeError(baseError: ClientRuntime.RestXMLError) throws -> InvalidRequest {
         var value = InvalidRequest()
         value.httpResponse = baseError.httpResponse
         value.requestID = baseError.requestID
@@ -21662,7 +21838,7 @@ extension InvalidRequest {
 
 extension InvalidWriteOffset {
 
-    static func makeError(baseError: AWSClientRuntime.RestXMLError) throws -> InvalidWriteOffset {
+    static func makeError(baseError: ClientRuntime.RestXMLError) throws -> InvalidWriteOffset {
         var value = InvalidWriteOffset()
         value.httpResponse = baseError.httpResponse
         value.requestID = baseError.requestID
@@ -21674,7 +21850,7 @@ extension InvalidWriteOffset {
 
 extension TooManyParts {
 
-    static func makeError(baseError: AWSClientRuntime.RestXMLError) throws -> TooManyParts {
+    static func makeError(baseError: ClientRuntime.RestXMLError) throws -> TooManyParts {
         var value = TooManyParts()
         value.httpResponse = baseError.httpResponse
         value.requestID = baseError.requestID
@@ -21686,7 +21862,7 @@ extension TooManyParts {
 
 extension IdempotencyParameterMismatch {
 
-    static func makeError(baseError: AWSClientRuntime.RestXMLError) throws -> IdempotencyParameterMismatch {
+    static func makeError(baseError: ClientRuntime.RestXMLError) throws -> IdempotencyParameterMismatch {
         var value = IdempotencyParameterMismatch()
         value.httpResponse = baseError.httpResponse
         value.requestID = baseError.requestID
@@ -21698,8 +21874,20 @@ extension IdempotencyParameterMismatch {
 
 extension ObjectAlreadyInActiveTierError {
 
-    static func makeError(baseError: AWSClientRuntime.RestXMLError) throws -> ObjectAlreadyInActiveTierError {
+    static func makeError(baseError: ClientRuntime.RestXMLError) throws -> ObjectAlreadyInActiveTierError {
         var value = ObjectAlreadyInActiveTierError()
+        value.httpResponse = baseError.httpResponse
+        value.requestID = baseError.requestID
+        value.message = baseError.message
+        value.requestID2 = baseError.requestID2
+        return value
+    }
+}
+
+extension AccessDenied {
+
+    static func makeError(baseError: ClientRuntime.RestXMLError) throws -> AccessDenied {
+        var value = AccessDenied()
         value.httpResponse = baseError.httpResponse
         value.requestID = baseError.requestID
         value.message = baseError.message
@@ -21757,6 +21945,297 @@ extension S3ClientTypes.SelectObjectContentEventStream {
     }
 }
 
+extension S3ClientTypes.AbacStatus {
+
+    static func write(value: S3ClientTypes.AbacStatus?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["Status"].write(value.status)
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.AbacStatus {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.AbacStatus()
+        value.status = try reader["Status"].readIfPresent()
+        return value
+    }
+}
+
+extension S3ClientTypes.AbortIncompleteMultipartUpload {
+
+    static func write(value: S3ClientTypes.AbortIncompleteMultipartUpload?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["DaysAfterInitiation"].write(value.daysAfterInitiation)
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.AbortIncompleteMultipartUpload {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.AbortIncompleteMultipartUpload()
+        value.daysAfterInitiation = try reader["DaysAfterInitiation"].readIfPresent()
+        return value
+    }
+}
+
+extension S3ClientTypes.AccelerateConfiguration {
+
+    static func write(value: S3ClientTypes.AccelerateConfiguration?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["Status"].write(value.status)
+    }
+}
+
+extension S3ClientTypes.AccessControlPolicy {
+
+    static func write(value: S3ClientTypes.AccessControlPolicy?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["AccessControlList"].writeList(value.grants, memberWritingClosure: S3ClientTypes.Grant.write(value:to:), memberNodeInfo: "Grant", isFlattened: false)
+        try writer["Owner"].write(value.owner, with: S3ClientTypes.Owner.write(value:to:))
+    }
+}
+
+extension S3ClientTypes.AccessControlTranslation {
+
+    static func write(value: S3ClientTypes.AccessControlTranslation?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["Owner"].write(value.owner)
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.AccessControlTranslation {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.AccessControlTranslation()
+        value.owner = try reader["Owner"].readIfPresent() ?? .sdkUnknown("")
+        return value
+    }
+}
+
+extension S3ClientTypes.AnalyticsAndOperator {
+
+    static func write(value: S3ClientTypes.AnalyticsAndOperator?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["Prefix"].write(value.`prefix`)
+        try writer["Tag"].writeList(value.tags, memberWritingClosure: S3ClientTypes.Tag.write(value:to:), memberNodeInfo: "Tag", isFlattened: true)
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.AnalyticsAndOperator {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.AnalyticsAndOperator()
+        value.`prefix` = try reader["Prefix"].readIfPresent()
+        value.tags = try reader["Tag"].readListIfPresent(memberReadingClosure: S3ClientTypes.Tag.read(from:), memberNodeInfo: "Tag", isFlattened: true)
+        return value
+    }
+}
+
+extension S3ClientTypes.AnalyticsConfiguration {
+
+    static func write(value: S3ClientTypes.AnalyticsConfiguration?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["Filter"].write(value.filter, with: S3ClientTypes.AnalyticsFilter.write(value:to:))
+        try writer["Id"].write(value.id)
+        try writer["StorageClassAnalysis"].write(value.storageClassAnalysis, with: S3ClientTypes.StorageClassAnalysis.write(value:to:))
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.AnalyticsConfiguration {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.AnalyticsConfiguration()
+        value.id = try reader["Id"].readIfPresent() ?? ""
+        value.filter = try reader["Filter"].readIfPresent(with: S3ClientTypes.AnalyticsFilter.read(from:))
+        value.storageClassAnalysis = try reader["StorageClassAnalysis"].readIfPresent(with: S3ClientTypes.StorageClassAnalysis.read(from:))
+        return value
+    }
+}
+
+extension S3ClientTypes.AnalyticsExportDestination {
+
+    static func write(value: S3ClientTypes.AnalyticsExportDestination?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["S3BucketDestination"].write(value.s3BucketDestination, with: S3ClientTypes.AnalyticsS3BucketDestination.write(value:to:))
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.AnalyticsExportDestination {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.AnalyticsExportDestination()
+        value.s3BucketDestination = try reader["S3BucketDestination"].readIfPresent(with: S3ClientTypes.AnalyticsS3BucketDestination.read(from:))
+        return value
+    }
+}
+
+extension S3ClientTypes.AnalyticsFilter {
+
+    static func write(value: S3ClientTypes.AnalyticsFilter?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        switch value {
+            case let .and(and):
+                try writer["And"].write(and, with: S3ClientTypes.AnalyticsAndOperator.write(value:to:))
+            case let .`prefix`(`prefix`):
+                try writer["Prefix"].write(`prefix`)
+            case let .tag(tag):
+                try writer["Tag"].write(tag, with: S3ClientTypes.Tag.write(value:to:))
+            case let .sdkUnknown(sdkUnknown):
+                try writer["sdkUnknown"].write(sdkUnknown)
+        }
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.AnalyticsFilter {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        let name = reader.children.filter { $0.hasContent && $0.nodeInfo.name != "__type" }.first?.nodeInfo.name
+        switch name {
+            case "Prefix":
+                return .`prefix`(try reader["Prefix"].read())
+            case "Tag":
+                return .tag(try reader["Tag"].read(with: S3ClientTypes.Tag.read(from:)))
+            case "And":
+                return .and(try reader["And"].read(with: S3ClientTypes.AnalyticsAndOperator.read(from:)))
+            default:
+                return .sdkUnknown(name ?? "")
+        }
+    }
+}
+
+extension S3ClientTypes.AnalyticsS3BucketDestination {
+
+    static func write(value: S3ClientTypes.AnalyticsS3BucketDestination?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["Bucket"].write(value.bucket)
+        try writer["BucketAccountId"].write(value.bucketAccountId)
+        try writer["Format"].write(value.format)
+        try writer["Prefix"].write(value.`prefix`)
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.AnalyticsS3BucketDestination {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.AnalyticsS3BucketDestination()
+        value.format = try reader["Format"].readIfPresent() ?? .sdkUnknown("")
+        value.bucketAccountId = try reader["BucketAccountId"].readIfPresent()
+        value.bucket = try reader["Bucket"].readIfPresent() ?? ""
+        value.`prefix` = try reader["Prefix"].readIfPresent()
+        return value
+    }
+}
+
+extension S3ClientTypes.BlockedEncryptionTypes {
+
+    static func write(value: S3ClientTypes.BlockedEncryptionTypes?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["EncryptionType"].writeList(value.encryptionType, memberWritingClosure: SmithyReadWrite.WritingClosureBox<S3ClientTypes.EncryptionType>().write(value:to:), memberNodeInfo: "EncryptionType", isFlattened: true)
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.BlockedEncryptionTypes {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.BlockedEncryptionTypes()
+        value.encryptionType = try reader["EncryptionType"].readListIfPresent(memberReadingClosure: SmithyReadWrite.ReadingClosureBox<S3ClientTypes.EncryptionType>().read(from:), memberNodeInfo: "EncryptionType", isFlattened: true)
+        return value
+    }
+}
+
+extension S3ClientTypes.Bucket {
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.Bucket {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.Bucket()
+        value.name = try reader["Name"].readIfPresent()
+        value.creationDate = try reader["CreationDate"].readTimestampIfPresent(format: SmithyTimestamps.TimestampFormat.dateTime)
+        value.bucketRegion = try reader["BucketRegion"].readIfPresent()
+        value.bucketArn = try reader["BucketArn"].readIfPresent()
+        return value
+    }
+}
+
+extension S3ClientTypes.BucketInfo {
+
+    static func write(value: S3ClientTypes.BucketInfo?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["DataRedundancy"].write(value.dataRedundancy)
+        try writer["Type"].write(value.type)
+    }
+}
+
+extension S3ClientTypes.BucketLifecycleConfiguration {
+
+    static func write(value: S3ClientTypes.BucketLifecycleConfiguration?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["Rule"].writeList(value.rules, memberWritingClosure: S3ClientTypes.LifecycleRule.write(value:to:), memberNodeInfo: "member", isFlattened: true)
+    }
+}
+
+extension S3ClientTypes.BucketLoggingStatus {
+
+    static func write(value: S3ClientTypes.BucketLoggingStatus?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["LoggingEnabled"].write(value.loggingEnabled, with: S3ClientTypes.LoggingEnabled.write(value:to:))
+    }
+}
+
+extension S3ClientTypes.Checksum {
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.Checksum {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.Checksum()
+        value.checksumCRC32 = try reader["ChecksumCRC32"].readIfPresent()
+        value.checksumCRC32C = try reader["ChecksumCRC32C"].readIfPresent()
+        value.checksumCRC64NVME = try reader["ChecksumCRC64NVME"].readIfPresent()
+        value.checksumSHA1 = try reader["ChecksumSHA1"].readIfPresent()
+        value.checksumSHA256 = try reader["ChecksumSHA256"].readIfPresent()
+        value.checksumType = try reader["ChecksumType"].readIfPresent()
+        return value
+    }
+}
+
+extension S3ClientTypes.CommonPrefix {
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.CommonPrefix {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.CommonPrefix()
+        value.`prefix` = try reader["Prefix"].readIfPresent()
+        return value
+    }
+}
+
+extension S3ClientTypes.CompletedMultipartUpload {
+
+    static func write(value: S3ClientTypes.CompletedMultipartUpload?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["Part"].writeList(value.parts, memberWritingClosure: S3ClientTypes.CompletedPart.write(value:to:), memberNodeInfo: "member", isFlattened: true)
+    }
+}
+
+extension S3ClientTypes.CompletedPart {
+
+    static func write(value: S3ClientTypes.CompletedPart?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["ChecksumCRC32"].write(value.checksumCRC32)
+        try writer["ChecksumCRC32C"].write(value.checksumCRC32C)
+        try writer["ChecksumCRC64NVME"].write(value.checksumCRC64NVME)
+        try writer["ChecksumSHA1"].write(value.checksumSHA1)
+        try writer["ChecksumSHA256"].write(value.checksumSHA256)
+        try writer["ETag"].write(value.eTag)
+        try writer["PartNumber"].write(value.partNumber)
+    }
+}
+
+extension S3ClientTypes.Condition {
+
+    static func write(value: S3ClientTypes.Condition?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["HttpErrorCodeReturnedEquals"].write(value.httpErrorCodeReturnedEquals)
+        try writer["KeyPrefixEquals"].write(value.keyPrefixEquals)
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.Condition {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.Condition()
+        value.httpErrorCodeReturnedEquals = try reader["HttpErrorCodeReturnedEquals"].readIfPresent()
+        value.keyPrefixEquals = try reader["KeyPrefixEquals"].readIfPresent()
+        return value
+    }
+}
+
+extension S3ClientTypes.ContinuationEvent {
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.ContinuationEvent {
+        guard reader.hasContent || Mirror(reflecting: self).children.isEmpty else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        return S3ClientTypes.ContinuationEvent()
+    }
+}
+
 extension S3ClientTypes.CopyObjectResult {
 
     static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.CopyObjectResult {
@@ -21774,16 +22253,117 @@ extension S3ClientTypes.CopyObjectResult {
     }
 }
 
-extension S3ClientTypes.SessionCredentials {
+extension S3ClientTypes.CopyPartResult {
 
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.SessionCredentials {
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.CopyPartResult {
         guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.SessionCredentials()
-        value.accessKeyId = try reader["AccessKeyId"].readIfPresent() ?? ""
-        value.secretAccessKey = try reader["SecretAccessKey"].readIfPresent() ?? ""
-        value.sessionToken = try reader["SessionToken"].readIfPresent() ?? ""
-        value.expiration = try reader["Expiration"].readTimestampIfPresent(format: SmithyTimestamps.TimestampFormat.dateTime) ?? SmithyTimestamps.TimestampFormatter(format: .dateTime).date(from: "1970-01-01T00:00:00Z")
+        var value = S3ClientTypes.CopyPartResult()
+        value.eTag = try reader["ETag"].readIfPresent()
+        value.lastModified = try reader["LastModified"].readTimestampIfPresent(format: SmithyTimestamps.TimestampFormat.dateTime)
+        value.checksumCRC32 = try reader["ChecksumCRC32"].readIfPresent()
+        value.checksumCRC32C = try reader["ChecksumCRC32C"].readIfPresent()
+        value.checksumCRC64NVME = try reader["ChecksumCRC64NVME"].readIfPresent()
+        value.checksumSHA1 = try reader["ChecksumSHA1"].readIfPresent()
+        value.checksumSHA256 = try reader["ChecksumSHA256"].readIfPresent()
         return value
+    }
+}
+
+extension S3ClientTypes.CORSConfiguration {
+
+    static func write(value: S3ClientTypes.CORSConfiguration?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["CORSRule"].writeList(value.corsRules, memberWritingClosure: S3ClientTypes.CORSRule.write(value:to:), memberNodeInfo: "member", isFlattened: true)
+    }
+}
+
+extension S3ClientTypes.CORSRule {
+
+    static func write(value: S3ClientTypes.CORSRule?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["AllowedHeader"].writeList(value.allowedHeaders, memberWritingClosure: SmithyReadWrite.WritingClosures.writeString(value:to:), memberNodeInfo: "member", isFlattened: true)
+        try writer["AllowedMethod"].writeList(value.allowedMethods, memberWritingClosure: SmithyReadWrite.WritingClosures.writeString(value:to:), memberNodeInfo: "member", isFlattened: true)
+        try writer["AllowedOrigin"].writeList(value.allowedOrigins, memberWritingClosure: SmithyReadWrite.WritingClosures.writeString(value:to:), memberNodeInfo: "member", isFlattened: true)
+        try writer["ExposeHeader"].writeList(value.exposeHeaders, memberWritingClosure: SmithyReadWrite.WritingClosures.writeString(value:to:), memberNodeInfo: "member", isFlattened: true)
+        try writer["ID"].write(value.id)
+        try writer["MaxAgeSeconds"].write(value.maxAgeSeconds)
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.CORSRule {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.CORSRule()
+        value.id = try reader["ID"].readIfPresent()
+        value.allowedHeaders = try reader["AllowedHeader"].readListIfPresent(memberReadingClosure: SmithyReadWrite.ReadingClosures.readString(from:), memberNodeInfo: "member", isFlattened: true)
+        value.allowedMethods = try reader["AllowedMethod"].readListIfPresent(memberReadingClosure: SmithyReadWrite.ReadingClosures.readString(from:), memberNodeInfo: "member", isFlattened: true) ?? []
+        value.allowedOrigins = try reader["AllowedOrigin"].readListIfPresent(memberReadingClosure: SmithyReadWrite.ReadingClosures.readString(from:), memberNodeInfo: "member", isFlattened: true) ?? []
+        value.exposeHeaders = try reader["ExposeHeader"].readListIfPresent(memberReadingClosure: SmithyReadWrite.ReadingClosures.readString(from:), memberNodeInfo: "member", isFlattened: true)
+        value.maxAgeSeconds = try reader["MaxAgeSeconds"].readIfPresent()
+        return value
+    }
+}
+
+extension S3ClientTypes.CreateBucketConfiguration {
+
+    static func write(value: S3ClientTypes.CreateBucketConfiguration?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["Bucket"].write(value.bucket, with: S3ClientTypes.BucketInfo.write(value:to:))
+        try writer["Location"].write(value.location, with: S3ClientTypes.LocationInfo.write(value:to:))
+        try writer["LocationConstraint"].write(value.locationConstraint)
+        try writer["Tags"].writeList(value.tags, memberWritingClosure: S3ClientTypes.Tag.write(value:to:), memberNodeInfo: "Tag", isFlattened: false)
+    }
+}
+
+extension S3ClientTypes.CSVInput {
+
+    static func write(value: S3ClientTypes.CSVInput?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["AllowQuotedRecordDelimiter"].write(value.allowQuotedRecordDelimiter)
+        try writer["Comments"].write(value.comments)
+        try writer["FieldDelimiter"].write(value.fieldDelimiter)
+        try writer["FileHeaderInfo"].write(value.fileHeaderInfo)
+        try writer["QuoteCharacter"].write(value.quoteCharacter)
+        try writer["QuoteEscapeCharacter"].write(value.quoteEscapeCharacter)
+        try writer["RecordDelimiter"].write(value.recordDelimiter)
+    }
+}
+
+extension S3ClientTypes.CSVOutput {
+
+    static func write(value: S3ClientTypes.CSVOutput?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["FieldDelimiter"].write(value.fieldDelimiter)
+        try writer["QuoteCharacter"].write(value.quoteCharacter)
+        try writer["QuoteEscapeCharacter"].write(value.quoteEscapeCharacter)
+        try writer["QuoteFields"].write(value.quoteFields)
+        try writer["RecordDelimiter"].write(value.recordDelimiter)
+    }
+}
+
+extension S3ClientTypes.DefaultRetention {
+
+    static func write(value: S3ClientTypes.DefaultRetention?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["Days"].write(value.days)
+        try writer["Mode"].write(value.mode)
+        try writer["Years"].write(value.years)
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.DefaultRetention {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.DefaultRetention()
+        value.mode = try reader["Mode"].readIfPresent()
+        value.days = try reader["Days"].readIfPresent()
+        value.years = try reader["Years"].readIfPresent()
+        return value
+    }
+}
+
+extension S3ClientTypes.Delete {
+
+    static func write(value: S3ClientTypes.Delete?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["Object"].writeList(value.objects, memberWritingClosure: S3ClientTypes.ObjectIdentifier.write(value:to:), memberNodeInfo: "member", isFlattened: true)
+        try writer["Quiet"].write(value.quiet)
     }
 }
 
@@ -21800,6 +22380,107 @@ extension S3ClientTypes.DeletedObject {
     }
 }
 
+extension S3ClientTypes.DeleteMarkerEntry {
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.DeleteMarkerEntry {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.DeleteMarkerEntry()
+        value.owner = try reader["Owner"].readIfPresent(with: S3ClientTypes.Owner.read(from:))
+        value.key = try reader["Key"].readIfPresent()
+        value.versionId = try reader["VersionId"].readIfPresent()
+        value.isLatest = try reader["IsLatest"].readIfPresent()
+        value.lastModified = try reader["LastModified"].readTimestampIfPresent(format: SmithyTimestamps.TimestampFormat.dateTime)
+        return value
+    }
+}
+
+extension S3ClientTypes.DeleteMarkerReplication {
+
+    static func write(value: S3ClientTypes.DeleteMarkerReplication?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["Status"].write(value.status)
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.DeleteMarkerReplication {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.DeleteMarkerReplication()
+        value.status = try reader["Status"].readIfPresent()
+        return value
+    }
+}
+
+extension S3ClientTypes.Destination {
+
+    static func write(value: S3ClientTypes.Destination?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["AccessControlTranslation"].write(value.accessControlTranslation, with: S3ClientTypes.AccessControlTranslation.write(value:to:))
+        try writer["Account"].write(value.account)
+        try writer["Bucket"].write(value.bucket)
+        try writer["EncryptionConfiguration"].write(value.encryptionConfiguration, with: S3ClientTypes.EncryptionConfiguration.write(value:to:))
+        try writer["Metrics"].write(value.metrics, with: S3ClientTypes.Metrics.write(value:to:))
+        try writer["ReplicationTime"].write(value.replicationTime, with: S3ClientTypes.ReplicationTime.write(value:to:))
+        try writer["StorageClass"].write(value.storageClass)
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.Destination {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.Destination()
+        value.bucket = try reader["Bucket"].readIfPresent() ?? ""
+        value.account = try reader["Account"].readIfPresent()
+        value.storageClass = try reader["StorageClass"].readIfPresent()
+        value.accessControlTranslation = try reader["AccessControlTranslation"].readIfPresent(with: S3ClientTypes.AccessControlTranslation.read(from:))
+        value.encryptionConfiguration = try reader["EncryptionConfiguration"].readIfPresent(with: S3ClientTypes.EncryptionConfiguration.read(from:))
+        value.replicationTime = try reader["ReplicationTime"].readIfPresent(with: S3ClientTypes.ReplicationTime.read(from:))
+        value.metrics = try reader["Metrics"].readIfPresent(with: S3ClientTypes.Metrics.read(from:))
+        return value
+    }
+}
+
+extension S3ClientTypes.DestinationResult {
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.DestinationResult {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.DestinationResult()
+        value.tableBucketType = try reader["TableBucketType"].readIfPresent()
+        value.tableBucketArn = try reader["TableBucketArn"].readIfPresent()
+        value.tableNamespace = try reader["TableNamespace"].readIfPresent()
+        return value
+    }
+}
+
+extension S3ClientTypes.Encryption {
+
+    static func write(value: S3ClientTypes.Encryption?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["EncryptionType"].write(value.encryptionType)
+        try writer["KMSContext"].write(value.kmsContext)
+        try writer["KMSKeyId"].write(value.kmsKeyId)
+    }
+}
+
+extension S3ClientTypes.EncryptionConfiguration {
+
+    static func write(value: S3ClientTypes.EncryptionConfiguration?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["ReplicaKmsKeyID"].write(value.replicaKmsKeyID)
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.EncryptionConfiguration {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.EncryptionConfiguration()
+        value.replicaKmsKeyID = try reader["ReplicaKmsKeyID"].readIfPresent()
+        return value
+    }
+}
+
+extension S3ClientTypes.EndEvent {
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.EndEvent {
+        guard reader.hasContent || Mirror(reflecting: self).children.isEmpty else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        return S3ClientTypes.EndEvent()
+    }
+}
+
 extension S3ClientTypes.Error {
 
     static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.Error {
@@ -21813,35 +22494,119 @@ extension S3ClientTypes.Error {
     }
 }
 
-extension S3ClientTypes.AbacStatus {
+extension S3ClientTypes.ErrorDetails {
 
-    static func write(value: S3ClientTypes.AbacStatus?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["Status"].write(value.status)
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.AbacStatus {
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.ErrorDetails {
         guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.AbacStatus()
-        value.status = try reader["Status"].readIfPresent()
+        var value = S3ClientTypes.ErrorDetails()
+        value.errorCode = try reader["ErrorCode"].readIfPresent()
+        value.errorMessage = try reader["ErrorMessage"].readIfPresent()
         return value
     }
 }
 
-extension S3ClientTypes.Owner {
+extension S3ClientTypes.ErrorDocument {
 
-    static func write(value: S3ClientTypes.Owner?, to writer: SmithyXML.Writer) throws {
+    static func write(value: S3ClientTypes.ErrorDocument?, to writer: SmithyXML.Writer) throws {
         guard let value else { return }
-        try writer["DisplayName"].write(value.displayName)
-        try writer["ID"].write(value.id)
+        try writer["Key"].write(value.key)
     }
 
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.Owner {
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.ErrorDocument {
         guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.Owner()
-        value.displayName = try reader["DisplayName"].readIfPresent()
-        value.id = try reader["ID"].readIfPresent()
+        var value = S3ClientTypes.ErrorDocument()
+        value.key = try reader["Key"].readIfPresent() ?? ""
         return value
+    }
+}
+
+extension S3ClientTypes.EventBridgeConfiguration {
+
+    static func write(value: S3ClientTypes.EventBridgeConfiguration?, to writer: SmithyXML.Writer) throws {
+        guard value != nil else { return }
+        _ = writer[""]  // create an empty structure
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.EventBridgeConfiguration {
+        guard reader.hasContent || Mirror(reflecting: self).children.isEmpty else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        return S3ClientTypes.EventBridgeConfiguration()
+    }
+}
+
+extension S3ClientTypes.ExistingObjectReplication {
+
+    static func write(value: S3ClientTypes.ExistingObjectReplication?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["Status"].write(value.status)
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.ExistingObjectReplication {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.ExistingObjectReplication()
+        value.status = try reader["Status"].readIfPresent() ?? .sdkUnknown("")
+        return value
+    }
+}
+
+extension S3ClientTypes.FilterRule {
+
+    static func write(value: S3ClientTypes.FilterRule?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["Name"].write(value.name)
+        try writer["Value"].write(value.value)
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.FilterRule {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.FilterRule()
+        value.name = try reader["Name"].readIfPresent()
+        value.value = try reader["Value"].readIfPresent()
+        return value
+    }
+}
+
+extension S3ClientTypes.GetBucketMetadataConfigurationResult {
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.GetBucketMetadataConfigurationResult {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.GetBucketMetadataConfigurationResult()
+        value.metadataConfigurationResult = try reader["MetadataConfigurationResult"].readIfPresent(with: S3ClientTypes.MetadataConfigurationResult.read(from:))
+        return value
+    }
+}
+
+extension S3ClientTypes.GetBucketMetadataTableConfigurationResult {
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.GetBucketMetadataTableConfigurationResult {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.GetBucketMetadataTableConfigurationResult()
+        value.metadataTableConfigurationResult = try reader["MetadataTableConfigurationResult"].readIfPresent(with: S3ClientTypes.MetadataTableConfigurationResult.read(from:))
+        value.status = try reader["Status"].readIfPresent() ?? ""
+        value.error = try reader["Error"].readIfPresent(with: S3ClientTypes.ErrorDetails.read(from:))
+        return value
+    }
+}
+
+extension S3ClientTypes.GetObjectAttributesParts {
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.GetObjectAttributesParts {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.GetObjectAttributesParts()
+        value.totalPartsCount = try reader["PartsCount"].readIfPresent()
+        value.partNumberMarker = try reader["PartNumberMarker"].readIfPresent()
+        value.nextPartNumberMarker = try reader["NextPartNumberMarker"].readIfPresent()
+        value.maxParts = try reader["MaxParts"].readIfPresent()
+        value.isTruncated = try reader["IsTruncated"].readIfPresent()
+        value.parts = try reader["Part"].readListIfPresent(memberReadingClosure: S3ClientTypes.ObjectPart.read(from:), memberNodeInfo: "member", isFlattened: true)
+        return value
+    }
+}
+
+extension S3ClientTypes.GlacierJobParameters {
+
+    static func write(value: S3ClientTypes.GlacierJobParameters?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["Tier"].write(value.tier)
     }
 }
 
@@ -21885,246 +22650,56 @@ extension S3ClientTypes.Grantee {
     }
 }
 
-extension S3ClientTypes.AnalyticsConfiguration {
+extension S3ClientTypes.IndexDocument {
 
-    static func write(value: S3ClientTypes.AnalyticsConfiguration?, to writer: SmithyXML.Writer) throws {
+    static func write(value: S3ClientTypes.IndexDocument?, to writer: SmithyXML.Writer) throws {
         guard let value else { return }
-        try writer["Filter"].write(value.filter, with: S3ClientTypes.AnalyticsFilter.write(value:to:))
-        try writer["Id"].write(value.id)
-        try writer["StorageClassAnalysis"].write(value.storageClassAnalysis, with: S3ClientTypes.StorageClassAnalysis.write(value:to:))
+        try writer["Suffix"].write(value.suffix)
     }
 
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.AnalyticsConfiguration {
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.IndexDocument {
         guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.AnalyticsConfiguration()
-        value.id = try reader["Id"].readIfPresent() ?? ""
-        value.filter = try reader["Filter"].readIfPresent(with: S3ClientTypes.AnalyticsFilter.read(from:))
-        value.storageClassAnalysis = try reader["StorageClassAnalysis"].readIfPresent(with: S3ClientTypes.StorageClassAnalysis.read(from:))
+        var value = S3ClientTypes.IndexDocument()
+        value.suffix = try reader["Suffix"].readIfPresent() ?? ""
         return value
     }
 }
 
-extension S3ClientTypes.StorageClassAnalysis {
+extension S3ClientTypes.Initiator {
 
-    static func write(value: S3ClientTypes.StorageClassAnalysis?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["DataExport"].write(value.dataExport, with: S3ClientTypes.StorageClassAnalysisDataExport.write(value:to:))
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.StorageClassAnalysis {
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.Initiator {
         guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.StorageClassAnalysis()
-        value.dataExport = try reader["DataExport"].readIfPresent(with: S3ClientTypes.StorageClassAnalysisDataExport.read(from:))
+        var value = S3ClientTypes.Initiator()
+        value.id = try reader["ID"].readIfPresent()
+        value.displayName = try reader["DisplayName"].readIfPresent()
         return value
     }
 }
 
-extension S3ClientTypes.StorageClassAnalysisDataExport {
+extension S3ClientTypes.InputSerialization {
 
-    static func write(value: S3ClientTypes.StorageClassAnalysisDataExport?, to writer: SmithyXML.Writer) throws {
+    static func write(value: S3ClientTypes.InputSerialization?, to writer: SmithyXML.Writer) throws {
         guard let value else { return }
-        try writer["Destination"].write(value.destination, with: S3ClientTypes.AnalyticsExportDestination.write(value:to:))
-        try writer["OutputSchemaVersion"].write(value.outputSchemaVersion)
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.StorageClassAnalysisDataExport {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.StorageClassAnalysisDataExport()
-        value.outputSchemaVersion = try reader["OutputSchemaVersion"].readIfPresent() ?? .sdkUnknown("")
-        value.destination = try reader["Destination"].readIfPresent(with: S3ClientTypes.AnalyticsExportDestination.read(from:))
-        return value
+        try writer["CSV"].write(value.csv, with: S3ClientTypes.CSVInput.write(value:to:))
+        try writer["CompressionType"].write(value.compressionType)
+        try writer["JSON"].write(value.json, with: S3ClientTypes.JSONInput.write(value:to:))
+        try writer["Parquet"].write(value.parquet, with: S3ClientTypes.ParquetInput.write(value:to:))
     }
 }
 
-extension S3ClientTypes.AnalyticsExportDestination {
+extension S3ClientTypes.IntelligentTieringAndOperator {
 
-    static func write(value: S3ClientTypes.AnalyticsExportDestination?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["S3BucketDestination"].write(value.s3BucketDestination, with: S3ClientTypes.AnalyticsS3BucketDestination.write(value:to:))
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.AnalyticsExportDestination {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.AnalyticsExportDestination()
-        value.s3BucketDestination = try reader["S3BucketDestination"].readIfPresent(with: S3ClientTypes.AnalyticsS3BucketDestination.read(from:))
-        return value
-    }
-}
-
-extension S3ClientTypes.AnalyticsS3BucketDestination {
-
-    static func write(value: S3ClientTypes.AnalyticsS3BucketDestination?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["Bucket"].write(value.bucket)
-        try writer["BucketAccountId"].write(value.bucketAccountId)
-        try writer["Format"].write(value.format)
-        try writer["Prefix"].write(value.`prefix`)
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.AnalyticsS3BucketDestination {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.AnalyticsS3BucketDestination()
-        value.format = try reader["Format"].readIfPresent() ?? .sdkUnknown("")
-        value.bucketAccountId = try reader["BucketAccountId"].readIfPresent()
-        value.bucket = try reader["Bucket"].readIfPresent() ?? ""
-        value.`prefix` = try reader["Prefix"].readIfPresent()
-        return value
-    }
-}
-
-extension S3ClientTypes.AnalyticsFilter {
-
-    static func write(value: S3ClientTypes.AnalyticsFilter?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        switch value {
-            case let .and(and):
-                try writer["And"].write(and, with: S3ClientTypes.AnalyticsAndOperator.write(value:to:))
-            case let .`prefix`(`prefix`):
-                try writer["Prefix"].write(`prefix`)
-            case let .tag(tag):
-                try writer["Tag"].write(tag, with: S3ClientTypes.Tag.write(value:to:))
-            case let .sdkUnknown(sdkUnknown):
-                try writer["sdkUnknown"].write(sdkUnknown)
-        }
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.AnalyticsFilter {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        let name = reader.children.filter { $0.hasContent && $0.nodeInfo.name != "__type" }.first?.nodeInfo.name
-        switch name {
-            case "Prefix":
-                return .`prefix`(try reader["Prefix"].read())
-            case "Tag":
-                return .tag(try reader["Tag"].read(with: S3ClientTypes.Tag.read(from:)))
-            case "And":
-                return .and(try reader["And"].read(with: S3ClientTypes.AnalyticsAndOperator.read(from:)))
-            default:
-                return .sdkUnknown(name ?? "")
-        }
-    }
-}
-
-extension S3ClientTypes.AnalyticsAndOperator {
-
-    static func write(value: S3ClientTypes.AnalyticsAndOperator?, to writer: SmithyXML.Writer) throws {
+    static func write(value: S3ClientTypes.IntelligentTieringAndOperator?, to writer: SmithyXML.Writer) throws {
         guard let value else { return }
         try writer["Prefix"].write(value.`prefix`)
         try writer["Tag"].writeList(value.tags, memberWritingClosure: S3ClientTypes.Tag.write(value:to:), memberNodeInfo: "Tag", isFlattened: true)
     }
 
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.AnalyticsAndOperator {
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.IntelligentTieringAndOperator {
         guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.AnalyticsAndOperator()
+        var value = S3ClientTypes.IntelligentTieringAndOperator()
         value.`prefix` = try reader["Prefix"].readIfPresent()
         value.tags = try reader["Tag"].readListIfPresent(memberReadingClosure: S3ClientTypes.Tag.read(from:), memberNodeInfo: "Tag", isFlattened: true)
-        return value
-    }
-}
-
-extension S3ClientTypes.Tag {
-
-    static func write(value: S3ClientTypes.Tag?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["Key"].write(value.key)
-        try writer["Value"].write(value.value)
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.Tag {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.Tag()
-        value.key = try reader["Key"].readIfPresent() ?? ""
-        value.value = try reader["Value"].readIfPresent() ?? ""
-        return value
-    }
-}
-
-extension S3ClientTypes.CORSRule {
-
-    static func write(value: S3ClientTypes.CORSRule?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["AllowedHeader"].writeList(value.allowedHeaders, memberWritingClosure: SmithyReadWrite.WritingClosures.writeString(value:to:), memberNodeInfo: "member", isFlattened: true)
-        try writer["AllowedMethod"].writeList(value.allowedMethods, memberWritingClosure: SmithyReadWrite.WritingClosures.writeString(value:to:), memberNodeInfo: "member", isFlattened: true)
-        try writer["AllowedOrigin"].writeList(value.allowedOrigins, memberWritingClosure: SmithyReadWrite.WritingClosures.writeString(value:to:), memberNodeInfo: "member", isFlattened: true)
-        try writer["ExposeHeader"].writeList(value.exposeHeaders, memberWritingClosure: SmithyReadWrite.WritingClosures.writeString(value:to:), memberNodeInfo: "member", isFlattened: true)
-        try writer["ID"].write(value.id)
-        try writer["MaxAgeSeconds"].write(value.maxAgeSeconds)
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.CORSRule {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.CORSRule()
-        value.id = try reader["ID"].readIfPresent()
-        value.allowedHeaders = try reader["AllowedHeader"].readListIfPresent(memberReadingClosure: SmithyReadWrite.ReadingClosures.readString(from:), memberNodeInfo: "member", isFlattened: true)
-        value.allowedMethods = try reader["AllowedMethod"].readListIfPresent(memberReadingClosure: SmithyReadWrite.ReadingClosures.readString(from:), memberNodeInfo: "member", isFlattened: true) ?? []
-        value.allowedOrigins = try reader["AllowedOrigin"].readListIfPresent(memberReadingClosure: SmithyReadWrite.ReadingClosures.readString(from:), memberNodeInfo: "member", isFlattened: true) ?? []
-        value.exposeHeaders = try reader["ExposeHeader"].readListIfPresent(memberReadingClosure: SmithyReadWrite.ReadingClosures.readString(from:), memberNodeInfo: "member", isFlattened: true)
-        value.maxAgeSeconds = try reader["MaxAgeSeconds"].readIfPresent()
-        return value
-    }
-}
-
-extension S3ClientTypes.ServerSideEncryptionConfiguration {
-
-    static func write(value: S3ClientTypes.ServerSideEncryptionConfiguration?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["Rule"].writeList(value.rules, memberWritingClosure: S3ClientTypes.ServerSideEncryptionRule.write(value:to:), memberNodeInfo: "member", isFlattened: true)
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.ServerSideEncryptionConfiguration {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.ServerSideEncryptionConfiguration()
-        value.rules = try reader["Rule"].readListIfPresent(memberReadingClosure: S3ClientTypes.ServerSideEncryptionRule.read(from:), memberNodeInfo: "member", isFlattened: true) ?? []
-        return value
-    }
-}
-
-extension S3ClientTypes.ServerSideEncryptionRule {
-
-    static func write(value: S3ClientTypes.ServerSideEncryptionRule?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["ApplyServerSideEncryptionByDefault"].write(value.applyServerSideEncryptionByDefault, with: S3ClientTypes.ServerSideEncryptionByDefault.write(value:to:))
-        try writer["BlockedEncryptionTypes"].write(value.blockedEncryptionTypes, with: S3ClientTypes.BlockedEncryptionTypes.write(value:to:))
-        try writer["BucketKeyEnabled"].write(value.bucketKeyEnabled)
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.ServerSideEncryptionRule {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.ServerSideEncryptionRule()
-        value.applyServerSideEncryptionByDefault = try reader["ApplyServerSideEncryptionByDefault"].readIfPresent(with: S3ClientTypes.ServerSideEncryptionByDefault.read(from:))
-        value.bucketKeyEnabled = try reader["BucketKeyEnabled"].readIfPresent()
-        value.blockedEncryptionTypes = try reader["BlockedEncryptionTypes"].readIfPresent(with: S3ClientTypes.BlockedEncryptionTypes.read(from:))
-        return value
-    }
-}
-
-extension S3ClientTypes.BlockedEncryptionTypes {
-
-    static func write(value: S3ClientTypes.BlockedEncryptionTypes?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["EncryptionType"].writeList(value.encryptionType, memberWritingClosure: SmithyReadWrite.WritingClosureBox<S3ClientTypes.EncryptionType>().write(value:to:), memberNodeInfo: "EncryptionType", isFlattened: true)
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.BlockedEncryptionTypes {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.BlockedEncryptionTypes()
-        value.encryptionType = try reader["EncryptionType"].readListIfPresent(memberReadingClosure: SmithyReadWrite.ReadingClosureBox<S3ClientTypes.EncryptionType>().read(from:), memberNodeInfo: "EncryptionType", isFlattened: true)
-        return value
-    }
-}
-
-extension S3ClientTypes.ServerSideEncryptionByDefault {
-
-    static func write(value: S3ClientTypes.ServerSideEncryptionByDefault?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["KMSMasterKeyID"].write(value.kmsMasterKeyID)
-        try writer["SSEAlgorithm"].write(value.sseAlgorithm)
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.ServerSideEncryptionByDefault {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.ServerSideEncryptionByDefault()
-        value.sseAlgorithm = try reader["SSEAlgorithm"].readIfPresent() ?? .sdkUnknown("")
-        value.kmsMasterKeyID = try reader["KMSMasterKeyID"].readIfPresent()
         return value
     }
 }
@@ -22150,23 +22725,6 @@ extension S3ClientTypes.IntelligentTieringConfiguration {
     }
 }
 
-extension S3ClientTypes.Tiering {
-
-    static func write(value: S3ClientTypes.Tiering?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["AccessTier"].write(value.accessTier)
-        try writer["Days"].write(value.days)
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.Tiering {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.Tiering()
-        value.days = try reader["Days"].readIfPresent() ?? 0
-        value.accessTier = try reader["AccessTier"].readIfPresent() ?? .sdkUnknown("")
-        return value
-    }
-}
-
 extension S3ClientTypes.IntelligentTieringFilter {
 
     static func write(value: S3ClientTypes.IntelligentTieringFilter?, to writer: SmithyXML.Writer) throws {
@@ -22182,23 +22740,6 @@ extension S3ClientTypes.IntelligentTieringFilter {
         value.`prefix` = try reader["Prefix"].readIfPresent()
         value.tag = try reader["Tag"].readIfPresent(with: S3ClientTypes.Tag.read(from:))
         value.and = try reader["And"].readIfPresent(with: S3ClientTypes.IntelligentTieringAndOperator.read(from:))
-        return value
-    }
-}
-
-extension S3ClientTypes.IntelligentTieringAndOperator {
-
-    static func write(value: S3ClientTypes.IntelligentTieringAndOperator?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["Prefix"].write(value.`prefix`)
-        try writer["Tag"].writeList(value.tags, memberWritingClosure: S3ClientTypes.Tag.write(value:to:), memberNodeInfo: "Tag", isFlattened: true)
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.IntelligentTieringAndOperator {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.IntelligentTieringAndOperator()
-        value.`prefix` = try reader["Prefix"].readIfPresent()
-        value.tags = try reader["Tag"].readListIfPresent(memberReadingClosure: S3ClientTypes.Tag.read(from:), memberNodeInfo: "Tag", isFlattened: true)
         return value
     }
 }
@@ -22230,17 +22771,34 @@ extension S3ClientTypes.InventoryConfiguration {
     }
 }
 
-extension S3ClientTypes.InventorySchedule {
+extension S3ClientTypes.InventoryDestination {
 
-    static func write(value: S3ClientTypes.InventorySchedule?, to writer: SmithyXML.Writer) throws {
+    static func write(value: S3ClientTypes.InventoryDestination?, to writer: SmithyXML.Writer) throws {
         guard let value else { return }
-        try writer["Frequency"].write(value.frequency)
+        try writer["S3BucketDestination"].write(value.s3BucketDestination, with: S3ClientTypes.InventoryS3BucketDestination.write(value:to:))
     }
 
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.InventorySchedule {
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.InventoryDestination {
         guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.InventorySchedule()
-        value.frequency = try reader["Frequency"].readIfPresent() ?? .sdkUnknown("")
+        var value = S3ClientTypes.InventoryDestination()
+        value.s3BucketDestination = try reader["S3BucketDestination"].readIfPresent(with: S3ClientTypes.InventoryS3BucketDestination.read(from:))
+        return value
+    }
+}
+
+extension S3ClientTypes.InventoryEncryption {
+
+    static func write(value: S3ClientTypes.InventoryEncryption?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["SSE-KMS"].write(value.ssekms, with: S3ClientTypes.SSEKMS.write(value:to:))
+        try writer["SSE-S3"].write(value.sses3, with: S3ClientTypes.SSES3.write(value:to:))
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.InventoryEncryption {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.InventoryEncryption()
+        value.sses3 = try reader["SSE-S3"].readIfPresent(with: S3ClientTypes.SSES3.read(from:))
+        value.ssekms = try reader["SSE-KMS"].readIfPresent(with: S3ClientTypes.SSEKMS.read(from:))
         return value
     }
 }
@@ -22256,21 +22814,6 @@ extension S3ClientTypes.InventoryFilter {
         guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
         var value = S3ClientTypes.InventoryFilter()
         value.`prefix` = try reader["Prefix"].readIfPresent() ?? ""
-        return value
-    }
-}
-
-extension S3ClientTypes.InventoryDestination {
-
-    static func write(value: S3ClientTypes.InventoryDestination?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["S3BucketDestination"].write(value.s3BucketDestination, with: S3ClientTypes.InventoryS3BucketDestination.write(value:to:))
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.InventoryDestination {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.InventoryDestination()
-        value.s3BucketDestination = try reader["S3BucketDestination"].readIfPresent(with: S3ClientTypes.InventoryS3BucketDestination.read(from:))
         return value
     }
 }
@@ -22298,48 +22841,137 @@ extension S3ClientTypes.InventoryS3BucketDestination {
     }
 }
 
-extension S3ClientTypes.InventoryEncryption {
+extension S3ClientTypes.InventorySchedule {
 
-    static func write(value: S3ClientTypes.InventoryEncryption?, to writer: SmithyXML.Writer) throws {
+    static func write(value: S3ClientTypes.InventorySchedule?, to writer: SmithyXML.Writer) throws {
         guard let value else { return }
-        try writer["SSE-KMS"].write(value.ssekms, with: S3ClientTypes.SSEKMS.write(value:to:))
-        try writer["SSE-S3"].write(value.sses3, with: S3ClientTypes.SSES3.write(value:to:))
+        try writer["Frequency"].write(value.frequency)
     }
 
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.InventoryEncryption {
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.InventorySchedule {
         guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.InventoryEncryption()
-        value.sses3 = try reader["SSE-S3"].readIfPresent(with: S3ClientTypes.SSES3.read(from:))
-        value.ssekms = try reader["SSE-KMS"].readIfPresent(with: S3ClientTypes.SSEKMS.read(from:))
+        var value = S3ClientTypes.InventorySchedule()
+        value.frequency = try reader["Frequency"].readIfPresent() ?? .sdkUnknown("")
         return value
     }
 }
 
-extension S3ClientTypes.SSEKMS {
+extension S3ClientTypes.InventoryTableConfiguration {
 
-    static func write(value: S3ClientTypes.SSEKMS?, to writer: SmithyXML.Writer) throws {
+    static func write(value: S3ClientTypes.InventoryTableConfiguration?, to writer: SmithyXML.Writer) throws {
         guard let value else { return }
-        try writer["KeyId"].write(value.keyId)
+        try writer["ConfigurationState"].write(value.configurationState)
+        try writer["EncryptionConfiguration"].write(value.encryptionConfiguration, with: S3ClientTypes.MetadataTableEncryptionConfiguration.write(value:to:))
     }
+}
 
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.SSEKMS {
+extension S3ClientTypes.InventoryTableConfigurationResult {
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.InventoryTableConfigurationResult {
         guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.SSEKMS()
-        value.keyId = try reader["KeyId"].readIfPresent() ?? ""
+        var value = S3ClientTypes.InventoryTableConfigurationResult()
+        value.configurationState = try reader["ConfigurationState"].readIfPresent() ?? .sdkUnknown("")
+        value.tableStatus = try reader["TableStatus"].readIfPresent()
+        value.error = try reader["Error"].readIfPresent(with: S3ClientTypes.ErrorDetails.read(from:))
+        value.tableName = try reader["TableName"].readIfPresent()
+        value.tableArn = try reader["TableArn"].readIfPresent()
         return value
     }
 }
 
-extension S3ClientTypes.SSES3 {
+extension S3ClientTypes.InventoryTableConfigurationUpdates {
 
-    static func write(value: S3ClientTypes.SSES3?, to writer: SmithyXML.Writer) throws {
-        guard value != nil else { return }
-        _ = writer[""]  // create an empty structure
+    static func write(value: S3ClientTypes.InventoryTableConfigurationUpdates?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["ConfigurationState"].write(value.configurationState)
+        try writer["EncryptionConfiguration"].write(value.encryptionConfiguration, with: S3ClientTypes.MetadataTableEncryptionConfiguration.write(value:to:))
+    }
+}
+
+extension S3ClientTypes.JournalTableConfiguration {
+
+    static func write(value: S3ClientTypes.JournalTableConfiguration?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["EncryptionConfiguration"].write(value.encryptionConfiguration, with: S3ClientTypes.MetadataTableEncryptionConfiguration.write(value:to:))
+        try writer["RecordExpiration"].write(value.recordExpiration, with: S3ClientTypes.RecordExpiration.write(value:to:))
+    }
+}
+
+extension S3ClientTypes.JournalTableConfigurationResult {
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.JournalTableConfigurationResult {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.JournalTableConfigurationResult()
+        value.tableStatus = try reader["TableStatus"].readIfPresent() ?? ""
+        value.error = try reader["Error"].readIfPresent(with: S3ClientTypes.ErrorDetails.read(from:))
+        value.tableName = try reader["TableName"].readIfPresent() ?? ""
+        value.tableArn = try reader["TableArn"].readIfPresent()
+        value.recordExpiration = try reader["RecordExpiration"].readIfPresent(with: S3ClientTypes.RecordExpiration.read(from:))
+        return value
+    }
+}
+
+extension S3ClientTypes.JournalTableConfigurationUpdates {
+
+    static func write(value: S3ClientTypes.JournalTableConfigurationUpdates?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["RecordExpiration"].write(value.recordExpiration, with: S3ClientTypes.RecordExpiration.write(value:to:))
+    }
+}
+
+extension S3ClientTypes.JSONInput {
+
+    static func write(value: S3ClientTypes.JSONInput?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["Type"].write(value.type)
+    }
+}
+
+extension S3ClientTypes.JSONOutput {
+
+    static func write(value: S3ClientTypes.JSONOutput?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["RecordDelimiter"].write(value.recordDelimiter)
+    }
+}
+
+extension S3ClientTypes.LambdaFunctionConfiguration {
+
+    static func write(value: S3ClientTypes.LambdaFunctionConfiguration?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["Event"].writeList(value.events, memberWritingClosure: SmithyReadWrite.WritingClosureBox<S3ClientTypes.Event>().write(value:to:), memberNodeInfo: "member", isFlattened: true)
+        try writer["Filter"].write(value.filter, with: S3ClientTypes.NotificationConfigurationFilter.write(value:to:))
+        try writer["Id"].write(value.id)
+        try writer["CloudFunction"].write(value.lambdaFunctionArn)
     }
 
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.SSES3 {
-        guard reader.hasContent || Mirror(reflecting: self).children.isEmpty else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        return S3ClientTypes.SSES3()
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.LambdaFunctionConfiguration {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.LambdaFunctionConfiguration()
+        value.id = try reader["Id"].readIfPresent()
+        value.lambdaFunctionArn = try reader["CloudFunction"].readIfPresent() ?? ""
+        value.events = try reader["Event"].readListIfPresent(memberReadingClosure: SmithyReadWrite.ReadingClosureBox<S3ClientTypes.Event>().read(from:), memberNodeInfo: "member", isFlattened: true) ?? []
+        value.filter = try reader["Filter"].readIfPresent(with: S3ClientTypes.NotificationConfigurationFilter.read(from:))
+        return value
+    }
+}
+
+extension S3ClientTypes.LifecycleExpiration {
+
+    static func write(value: S3ClientTypes.LifecycleExpiration?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["Date"].writeTimestamp(value.date, format: SmithyTimestamps.TimestampFormat.dateTime)
+        try writer["Days"].write(value.days)
+        try writer["ExpiredObjectDeleteMarker"].write(value.expiredObjectDeleteMarker)
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.LifecycleExpiration {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.LifecycleExpiration()
+        value.date = try reader["Date"].readTimestampIfPresent(format: SmithyTimestamps.TimestampFormat.dateTime)
+        value.days = try reader["Days"].readIfPresent()
+        value.expiredObjectDeleteMarker = try reader["ExpiredObjectDeleteMarker"].readIfPresent()
+        return value
     }
 }
 
@@ -22374,72 +23006,23 @@ extension S3ClientTypes.LifecycleRule {
     }
 }
 
-extension S3ClientTypes.AbortIncompleteMultipartUpload {
+extension S3ClientTypes.LifecycleRuleAndOperator {
 
-    static func write(value: S3ClientTypes.AbortIncompleteMultipartUpload?, to writer: SmithyXML.Writer) throws {
+    static func write(value: S3ClientTypes.LifecycleRuleAndOperator?, to writer: SmithyXML.Writer) throws {
         guard let value else { return }
-        try writer["DaysAfterInitiation"].write(value.daysAfterInitiation)
+        try writer["ObjectSizeGreaterThan"].write(value.objectSizeGreaterThan)
+        try writer["ObjectSizeLessThan"].write(value.objectSizeLessThan)
+        try writer["Prefix"].write(value.`prefix`)
+        try writer["Tag"].writeList(value.tags, memberWritingClosure: S3ClientTypes.Tag.write(value:to:), memberNodeInfo: "Tag", isFlattened: true)
     }
 
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.AbortIncompleteMultipartUpload {
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.LifecycleRuleAndOperator {
         guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.AbortIncompleteMultipartUpload()
-        value.daysAfterInitiation = try reader["DaysAfterInitiation"].readIfPresent()
-        return value
-    }
-}
-
-extension S3ClientTypes.NoncurrentVersionExpiration {
-
-    static func write(value: S3ClientTypes.NoncurrentVersionExpiration?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["NewerNoncurrentVersions"].write(value.newerNoncurrentVersions)
-        try writer["NoncurrentDays"].write(value.noncurrentDays)
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.NoncurrentVersionExpiration {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.NoncurrentVersionExpiration()
-        value.noncurrentDays = try reader["NoncurrentDays"].readIfPresent()
-        value.newerNoncurrentVersions = try reader["NewerNoncurrentVersions"].readIfPresent()
-        return value
-    }
-}
-
-extension S3ClientTypes.NoncurrentVersionTransition {
-
-    static func write(value: S3ClientTypes.NoncurrentVersionTransition?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["NewerNoncurrentVersions"].write(value.newerNoncurrentVersions)
-        try writer["NoncurrentDays"].write(value.noncurrentDays)
-        try writer["StorageClass"].write(value.storageClass)
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.NoncurrentVersionTransition {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.NoncurrentVersionTransition()
-        value.noncurrentDays = try reader["NoncurrentDays"].readIfPresent()
-        value.storageClass = try reader["StorageClass"].readIfPresent()
-        value.newerNoncurrentVersions = try reader["NewerNoncurrentVersions"].readIfPresent()
-        return value
-    }
-}
-
-extension S3ClientTypes.Transition {
-
-    static func write(value: S3ClientTypes.Transition?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["Date"].writeTimestamp(value.date, format: SmithyTimestamps.TimestampFormat.dateTime)
-        try writer["Days"].write(value.days)
-        try writer["StorageClass"].write(value.storageClass)
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.Transition {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.Transition()
-        value.date = try reader["Date"].readTimestampIfPresent(format: SmithyTimestamps.TimestampFormat.dateTime)
-        value.days = try reader["Days"].readIfPresent()
-        value.storageClass = try reader["StorageClass"].readIfPresent()
+        var value = S3ClientTypes.LifecycleRuleAndOperator()
+        value.`prefix` = try reader["Prefix"].readIfPresent()
+        value.tags = try reader["Tag"].readListIfPresent(memberReadingClosure: S3ClientTypes.Tag.read(from:), memberNodeInfo: "Tag", isFlattened: true)
+        value.objectSizeGreaterThan = try reader["ObjectSizeGreaterThan"].readIfPresent()
+        value.objectSizeLessThan = try reader["ObjectSizeLessThan"].readIfPresent()
         return value
     }
 }
@@ -22467,43 +23050,12 @@ extension S3ClientTypes.LifecycleRuleFilter {
     }
 }
 
-extension S3ClientTypes.LifecycleRuleAndOperator {
+extension S3ClientTypes.LocationInfo {
 
-    static func write(value: S3ClientTypes.LifecycleRuleAndOperator?, to writer: SmithyXML.Writer) throws {
+    static func write(value: S3ClientTypes.LocationInfo?, to writer: SmithyXML.Writer) throws {
         guard let value else { return }
-        try writer["ObjectSizeGreaterThan"].write(value.objectSizeGreaterThan)
-        try writer["ObjectSizeLessThan"].write(value.objectSizeLessThan)
-        try writer["Prefix"].write(value.`prefix`)
-        try writer["Tag"].writeList(value.tags, memberWritingClosure: S3ClientTypes.Tag.write(value:to:), memberNodeInfo: "Tag", isFlattened: true)
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.LifecycleRuleAndOperator {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.LifecycleRuleAndOperator()
-        value.`prefix` = try reader["Prefix"].readIfPresent()
-        value.tags = try reader["Tag"].readListIfPresent(memberReadingClosure: S3ClientTypes.Tag.read(from:), memberNodeInfo: "Tag", isFlattened: true)
-        value.objectSizeGreaterThan = try reader["ObjectSizeGreaterThan"].readIfPresent()
-        value.objectSizeLessThan = try reader["ObjectSizeLessThan"].readIfPresent()
-        return value
-    }
-}
-
-extension S3ClientTypes.LifecycleExpiration {
-
-    static func write(value: S3ClientTypes.LifecycleExpiration?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["Date"].writeTimestamp(value.date, format: SmithyTimestamps.TimestampFormat.dateTime)
-        try writer["Days"].write(value.days)
-        try writer["ExpiredObjectDeleteMarker"].write(value.expiredObjectDeleteMarker)
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.LifecycleExpiration {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.LifecycleExpiration()
-        value.date = try reader["Date"].readTimestampIfPresent(format: SmithyTimestamps.TimestampFormat.dateTime)
-        value.days = try reader["Days"].readIfPresent()
-        value.expiredObjectDeleteMarker = try reader["ExpiredObjectDeleteMarker"].readIfPresent()
-        return value
+        try writer["Name"].write(value.name)
+        try writer["Type"].write(value.type)
     }
 }
 
@@ -22528,75 +23080,12 @@ extension S3ClientTypes.LoggingEnabled {
     }
 }
 
-extension S3ClientTypes.TargetObjectKeyFormat {
+extension S3ClientTypes.MetadataConfiguration {
 
-    static func write(value: S3ClientTypes.TargetObjectKeyFormat?, to writer: SmithyXML.Writer) throws {
+    static func write(value: S3ClientTypes.MetadataConfiguration?, to writer: SmithyXML.Writer) throws {
         guard let value else { return }
-        try writer["PartitionedPrefix"].write(value.partitionedPrefix, with: S3ClientTypes.PartitionedPrefix.write(value:to:))
-        try writer["SimplePrefix"].write(value.simplePrefix, with: S3ClientTypes.SimplePrefix.write(value:to:))
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.TargetObjectKeyFormat {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.TargetObjectKeyFormat()
-        value.simplePrefix = try reader["SimplePrefix"].readIfPresent(with: S3ClientTypes.SimplePrefix.read(from:))
-        value.partitionedPrefix = try reader["PartitionedPrefix"].readIfPresent(with: S3ClientTypes.PartitionedPrefix.read(from:))
-        return value
-    }
-}
-
-extension S3ClientTypes.PartitionedPrefix {
-
-    static func write(value: S3ClientTypes.PartitionedPrefix?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["PartitionDateSource"].write(value.partitionDateSource)
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.PartitionedPrefix {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.PartitionedPrefix()
-        value.partitionDateSource = try reader["PartitionDateSource"].readIfPresent()
-        return value
-    }
-}
-
-extension S3ClientTypes.SimplePrefix {
-
-    static func write(value: S3ClientTypes.SimplePrefix?, to writer: SmithyXML.Writer) throws {
-        guard value != nil else { return }
-        _ = writer[""]  // create an empty structure
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.SimplePrefix {
-        guard reader.hasContent || Mirror(reflecting: self).children.isEmpty else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        return S3ClientTypes.SimplePrefix()
-    }
-}
-
-extension S3ClientTypes.TargetGrant {
-
-    static func write(value: S3ClientTypes.TargetGrant?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer[.init("Grantee", namespaceDef: .init(prefix: "xsi", uri: "http://www.w3.org/2001/XMLSchema-instance"))].write(value.grantee, with: S3ClientTypes.Grantee.write(value:to:))
-        try writer["Permission"].write(value.permission)
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.TargetGrant {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.TargetGrant()
-        value.grantee = try reader[.init("Grantee", namespaceDef: .init(prefix: "xsi", uri: "http://www.w3.org/2001/XMLSchema-instance"))].readIfPresent(with: S3ClientTypes.Grantee.read(from:))
-        value.permission = try reader["Permission"].readIfPresent()
-        return value
-    }
-}
-
-extension S3ClientTypes.GetBucketMetadataConfigurationResult {
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.GetBucketMetadataConfigurationResult {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.GetBucketMetadataConfigurationResult()
-        value.metadataConfigurationResult = try reader["MetadataConfigurationResult"].readIfPresent(with: S3ClientTypes.MetadataConfigurationResult.read(from:))
-        return value
+        try writer["InventoryTableConfiguration"].write(value.inventoryTableConfiguration, with: S3ClientTypes.InventoryTableConfiguration.write(value:to:))
+        try writer["JournalTableConfiguration"].write(value.journalTableConfiguration, with: S3ClientTypes.JournalTableConfiguration.write(value:to:))
     }
 }
 
@@ -22612,83 +23101,20 @@ extension S3ClientTypes.MetadataConfigurationResult {
     }
 }
 
-extension S3ClientTypes.InventoryTableConfigurationResult {
+extension S3ClientTypes.MetadataEntry {
 
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.InventoryTableConfigurationResult {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.InventoryTableConfigurationResult()
-        value.configurationState = try reader["ConfigurationState"].readIfPresent() ?? .sdkUnknown("")
-        value.tableStatus = try reader["TableStatus"].readIfPresent()
-        value.error = try reader["Error"].readIfPresent(with: S3ClientTypes.ErrorDetails.read(from:))
-        value.tableName = try reader["TableName"].readIfPresent()
-        value.tableArn = try reader["TableArn"].readIfPresent()
-        return value
-    }
-}
-
-extension S3ClientTypes.ErrorDetails {
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.ErrorDetails {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.ErrorDetails()
-        value.errorCode = try reader["ErrorCode"].readIfPresent()
-        value.errorMessage = try reader["ErrorMessage"].readIfPresent()
-        return value
-    }
-}
-
-extension S3ClientTypes.JournalTableConfigurationResult {
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.JournalTableConfigurationResult {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.JournalTableConfigurationResult()
-        value.tableStatus = try reader["TableStatus"].readIfPresent() ?? ""
-        value.error = try reader["Error"].readIfPresent(with: S3ClientTypes.ErrorDetails.read(from:))
-        value.tableName = try reader["TableName"].readIfPresent() ?? ""
-        value.tableArn = try reader["TableArn"].readIfPresent()
-        value.recordExpiration = try reader["RecordExpiration"].readIfPresent(with: S3ClientTypes.RecordExpiration.read(from:))
-        return value
-    }
-}
-
-extension S3ClientTypes.RecordExpiration {
-
-    static func write(value: S3ClientTypes.RecordExpiration?, to writer: SmithyXML.Writer) throws {
+    static func write(value: S3ClientTypes.MetadataEntry?, to writer: SmithyXML.Writer) throws {
         guard let value else { return }
-        try writer["Days"].write(value.days)
-        try writer["Expiration"].write(value.expiration)
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.RecordExpiration {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.RecordExpiration()
-        value.expiration = try reader["Expiration"].readIfPresent() ?? .sdkUnknown("")
-        value.days = try reader["Days"].readIfPresent()
-        return value
+        try writer["Name"].write(value.name)
+        try writer["Value"].write(value.value)
     }
 }
 
-extension S3ClientTypes.DestinationResult {
+extension S3ClientTypes.MetadataTableConfiguration {
 
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.DestinationResult {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.DestinationResult()
-        value.tableBucketType = try reader["TableBucketType"].readIfPresent()
-        value.tableBucketArn = try reader["TableBucketArn"].readIfPresent()
-        value.tableNamespace = try reader["TableNamespace"].readIfPresent()
-        return value
-    }
-}
-
-extension S3ClientTypes.GetBucketMetadataTableConfigurationResult {
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.GetBucketMetadataTableConfigurationResult {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.GetBucketMetadataTableConfigurationResult()
-        value.metadataTableConfigurationResult = try reader["MetadataTableConfigurationResult"].readIfPresent(with: S3ClientTypes.MetadataTableConfigurationResult.read(from:))
-        value.status = try reader["Status"].readIfPresent() ?? ""
-        value.error = try reader["Error"].readIfPresent(with: S3ClientTypes.ErrorDetails.read(from:))
-        return value
+    static func write(value: S3ClientTypes.MetadataTableConfiguration?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["S3TablesDestination"].write(value.s3TablesDestination, with: S3ClientTypes.S3TablesDestination.write(value:to:))
     }
 }
 
@@ -22702,15 +23128,47 @@ extension S3ClientTypes.MetadataTableConfigurationResult {
     }
 }
 
-extension S3ClientTypes.S3TablesDestinationResult {
+extension S3ClientTypes.MetadataTableEncryptionConfiguration {
 
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.S3TablesDestinationResult {
+    static func write(value: S3ClientTypes.MetadataTableEncryptionConfiguration?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["KmsKeyArn"].write(value.kmsKeyArn)
+        try writer["SseAlgorithm"].write(value.sseAlgorithm)
+    }
+}
+
+extension S3ClientTypes.Metrics {
+
+    static func write(value: S3ClientTypes.Metrics?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["EventThreshold"].write(value.eventThreshold, with: S3ClientTypes.ReplicationTimeValue.write(value:to:))
+        try writer["Status"].write(value.status)
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.Metrics {
         guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.S3TablesDestinationResult()
-        value.tableBucketArn = try reader["TableBucketArn"].readIfPresent() ?? ""
-        value.tableName = try reader["TableName"].readIfPresent() ?? ""
-        value.tableArn = try reader["TableArn"].readIfPresent() ?? ""
-        value.tableNamespace = try reader["TableNamespace"].readIfPresent() ?? ""
+        var value = S3ClientTypes.Metrics()
+        value.status = try reader["Status"].readIfPresent() ?? .sdkUnknown("")
+        value.eventThreshold = try reader["EventThreshold"].readIfPresent(with: S3ClientTypes.ReplicationTimeValue.read(from:))
+        return value
+    }
+}
+
+extension S3ClientTypes.MetricsAndOperator {
+
+    static func write(value: S3ClientTypes.MetricsAndOperator?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["AccessPointArn"].write(value.accessPointArn)
+        try writer["Prefix"].write(value.`prefix`)
+        try writer["Tag"].writeList(value.tags, memberWritingClosure: S3ClientTypes.Tag.write(value:to:), memberNodeInfo: "Tag", isFlattened: true)
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.MetricsAndOperator {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.MetricsAndOperator()
+        value.`prefix` = try reader["Prefix"].readIfPresent()
+        value.tags = try reader["Tag"].readListIfPresent(memberReadingClosure: S3ClientTypes.Tag.read(from:), memberNodeInfo: "Tag", isFlattened: true)
+        value.accessPointArn = try reader["AccessPointArn"].readIfPresent()
         return value
     }
 }
@@ -22768,43 +23226,67 @@ extension S3ClientTypes.MetricsFilter {
     }
 }
 
-extension S3ClientTypes.MetricsAndOperator {
+extension S3ClientTypes.MultipartUpload {
 
-    static func write(value: S3ClientTypes.MetricsAndOperator?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["AccessPointArn"].write(value.accessPointArn)
-        try writer["Prefix"].write(value.`prefix`)
-        try writer["Tag"].writeList(value.tags, memberWritingClosure: S3ClientTypes.Tag.write(value:to:), memberNodeInfo: "Tag", isFlattened: true)
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.MetricsAndOperator {
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.MultipartUpload {
         guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.MetricsAndOperator()
-        value.`prefix` = try reader["Prefix"].readIfPresent()
-        value.tags = try reader["Tag"].readListIfPresent(memberReadingClosure: S3ClientTypes.Tag.read(from:), memberNodeInfo: "Tag", isFlattened: true)
-        value.accessPointArn = try reader["AccessPointArn"].readIfPresent()
+        var value = S3ClientTypes.MultipartUpload()
+        value.uploadId = try reader["UploadId"].readIfPresent()
+        value.key = try reader["Key"].readIfPresent()
+        value.initiated = try reader["Initiated"].readTimestampIfPresent(format: SmithyTimestamps.TimestampFormat.dateTime)
+        value.storageClass = try reader["StorageClass"].readIfPresent()
+        value.owner = try reader["Owner"].readIfPresent(with: S3ClientTypes.Owner.read(from:))
+        value.initiator = try reader["Initiator"].readIfPresent(with: S3ClientTypes.Initiator.read(from:))
+        value.checksumAlgorithm = try reader["ChecksumAlgorithm"].readIfPresent()
+        value.checksumType = try reader["ChecksumType"].readIfPresent()
         return value
     }
 }
 
-extension S3ClientTypes.TopicConfiguration {
+extension S3ClientTypes.NoncurrentVersionExpiration {
 
-    static func write(value: S3ClientTypes.TopicConfiguration?, to writer: SmithyXML.Writer) throws {
+    static func write(value: S3ClientTypes.NoncurrentVersionExpiration?, to writer: SmithyXML.Writer) throws {
         guard let value else { return }
-        try writer["Event"].writeList(value.events, memberWritingClosure: SmithyReadWrite.WritingClosureBox<S3ClientTypes.Event>().write(value:to:), memberNodeInfo: "member", isFlattened: true)
-        try writer["Filter"].write(value.filter, with: S3ClientTypes.NotificationConfigurationFilter.write(value:to:))
-        try writer["Id"].write(value.id)
-        try writer["Topic"].write(value.topicArn)
+        try writer["NewerNoncurrentVersions"].write(value.newerNoncurrentVersions)
+        try writer["NoncurrentDays"].write(value.noncurrentDays)
     }
 
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.TopicConfiguration {
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.NoncurrentVersionExpiration {
         guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.TopicConfiguration()
-        value.id = try reader["Id"].readIfPresent()
-        value.topicArn = try reader["Topic"].readIfPresent() ?? ""
-        value.events = try reader["Event"].readListIfPresent(memberReadingClosure: SmithyReadWrite.ReadingClosureBox<S3ClientTypes.Event>().read(from:), memberNodeInfo: "member", isFlattened: true) ?? []
-        value.filter = try reader["Filter"].readIfPresent(with: S3ClientTypes.NotificationConfigurationFilter.read(from:))
+        var value = S3ClientTypes.NoncurrentVersionExpiration()
+        value.noncurrentDays = try reader["NoncurrentDays"].readIfPresent()
+        value.newerNoncurrentVersions = try reader["NewerNoncurrentVersions"].readIfPresent()
         return value
+    }
+}
+
+extension S3ClientTypes.NoncurrentVersionTransition {
+
+    static func write(value: S3ClientTypes.NoncurrentVersionTransition?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["NewerNoncurrentVersions"].write(value.newerNoncurrentVersions)
+        try writer["NoncurrentDays"].write(value.noncurrentDays)
+        try writer["StorageClass"].write(value.storageClass)
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.NoncurrentVersionTransition {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.NoncurrentVersionTransition()
+        value.noncurrentDays = try reader["NoncurrentDays"].readIfPresent()
+        value.storageClass = try reader["StorageClass"].readIfPresent()
+        value.newerNoncurrentVersions = try reader["NewerNoncurrentVersions"].readIfPresent()
+        return value
+    }
+}
+
+extension S3ClientTypes.NotificationConfiguration {
+
+    static func write(value: S3ClientTypes.NotificationConfiguration?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["EventBridgeConfiguration"].write(value.eventBridgeConfiguration, with: S3ClientTypes.EventBridgeConfiguration.write(value:to:))
+        try writer["CloudFunctionConfiguration"].writeList(value.lambdaFunctionConfigurations, memberWritingClosure: S3ClientTypes.LambdaFunctionConfiguration.write(value:to:), memberNodeInfo: "member", isFlattened: true)
+        try writer["QueueConfiguration"].writeList(value.queueConfigurations, memberWritingClosure: S3ClientTypes.QueueConfiguration.write(value:to:), memberNodeInfo: "member", isFlattened: true)
+        try writer["TopicConfiguration"].writeList(value.topicConfigurations, memberWritingClosure: S3ClientTypes.TopicConfiguration.write(value:to:), memberNodeInfo: "member", isFlattened: true)
     }
 }
 
@@ -22823,90 +23305,180 @@ extension S3ClientTypes.NotificationConfigurationFilter {
     }
 }
 
-extension S3ClientTypes.S3KeyFilter {
+extension S3ClientTypes.Object {
 
-    static func write(value: S3ClientTypes.S3KeyFilter?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["FilterRule"].writeList(value.filterRules, memberWritingClosure: S3ClientTypes.FilterRule.write(value:to:), memberNodeInfo: "member", isFlattened: true)
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.S3KeyFilter {
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.Object {
         guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.S3KeyFilter()
-        value.filterRules = try reader["FilterRule"].readListIfPresent(memberReadingClosure: S3ClientTypes.FilterRule.read(from:), memberNodeInfo: "member", isFlattened: true)
+        var value = S3ClientTypes.Object()
+        value.key = try reader["Key"].readIfPresent()
+        value.lastModified = try reader["LastModified"].readTimestampIfPresent(format: SmithyTimestamps.TimestampFormat.dateTime)
+        value.eTag = try reader["ETag"].readIfPresent()
+        value.checksumAlgorithm = try reader["ChecksumAlgorithm"].readListIfPresent(memberReadingClosure: SmithyReadWrite.ReadingClosureBox<S3ClientTypes.ChecksumAlgorithm>().read(from:), memberNodeInfo: "member", isFlattened: true)
+        value.checksumType = try reader["ChecksumType"].readIfPresent()
+        value.size = try reader["Size"].readIfPresent()
+        value.storageClass = try reader["StorageClass"].readIfPresent()
+        value.owner = try reader["Owner"].readIfPresent(with: S3ClientTypes.Owner.read(from:))
+        value.restoreStatus = try reader["RestoreStatus"].readIfPresent(with: S3ClientTypes.RestoreStatus.read(from:))
         return value
     }
 }
 
-extension S3ClientTypes.FilterRule {
+extension S3ClientTypes.ObjectEncryption {
 
-    static func write(value: S3ClientTypes.FilterRule?, to writer: SmithyXML.Writer) throws {
+    static func write(value: S3ClientTypes.ObjectEncryption?, to writer: SmithyXML.Writer) throws {
         guard let value else { return }
-        try writer["Name"].write(value.name)
-        try writer["Value"].write(value.value)
+        switch value {
+            case let .ssekms(ssekms):
+                try writer["SSE-KMS"].write(ssekms, with: S3ClientTypes.SSEKMSEncryption.write(value:to:))
+            case let .sdkUnknown(sdkUnknown):
+                try writer["sdkUnknown"].write(sdkUnknown)
+        }
+    }
+}
+
+extension S3ClientTypes.ObjectIdentifier {
+
+    static func write(value: S3ClientTypes.ObjectIdentifier?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["ETag"].write(value.eTag)
+        try writer["Key"].write(value.key)
+        try writer["LastModifiedTime"].writeTimestamp(value.lastModifiedTime, format: SmithyTimestamps.TimestampFormat.httpDate)
+        try writer["Size"].write(value.size)
+        try writer["VersionId"].write(value.versionId)
+    }
+}
+
+extension S3ClientTypes.ObjectLockConfiguration {
+
+    static func write(value: S3ClientTypes.ObjectLockConfiguration?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["ObjectLockEnabled"].write(value.objectLockEnabled)
+        try writer["Rule"].write(value.rule, with: S3ClientTypes.ObjectLockRule.write(value:to:))
     }
 
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.FilterRule {
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.ObjectLockConfiguration {
         guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.FilterRule()
-        value.name = try reader["Name"].readIfPresent()
-        value.value = try reader["Value"].readIfPresent()
+        var value = S3ClientTypes.ObjectLockConfiguration()
+        value.objectLockEnabled = try reader["ObjectLockEnabled"].readIfPresent()
+        value.rule = try reader["Rule"].readIfPresent(with: S3ClientTypes.ObjectLockRule.read(from:))
         return value
     }
 }
 
-extension S3ClientTypes.QueueConfiguration {
+extension S3ClientTypes.ObjectLockLegalHold {
 
-    static func write(value: S3ClientTypes.QueueConfiguration?, to writer: SmithyXML.Writer) throws {
+    static func write(value: S3ClientTypes.ObjectLockLegalHold?, to writer: SmithyXML.Writer) throws {
         guard let value else { return }
-        try writer["Event"].writeList(value.events, memberWritingClosure: SmithyReadWrite.WritingClosureBox<S3ClientTypes.Event>().write(value:to:), memberNodeInfo: "member", isFlattened: true)
-        try writer["Filter"].write(value.filter, with: S3ClientTypes.NotificationConfigurationFilter.write(value:to:))
-        try writer["Id"].write(value.id)
-        try writer["Queue"].write(value.queueArn)
+        try writer["Status"].write(value.status)
     }
 
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.QueueConfiguration {
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.ObjectLockLegalHold {
         guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.QueueConfiguration()
-        value.id = try reader["Id"].readIfPresent()
-        value.queueArn = try reader["Queue"].readIfPresent() ?? ""
-        value.events = try reader["Event"].readListIfPresent(memberReadingClosure: SmithyReadWrite.ReadingClosureBox<S3ClientTypes.Event>().read(from:), memberNodeInfo: "member", isFlattened: true) ?? []
-        value.filter = try reader["Filter"].readIfPresent(with: S3ClientTypes.NotificationConfigurationFilter.read(from:))
+        var value = S3ClientTypes.ObjectLockLegalHold()
+        value.status = try reader["Status"].readIfPresent()
         return value
     }
 }
 
-extension S3ClientTypes.LambdaFunctionConfiguration {
+extension S3ClientTypes.ObjectLockRetention {
 
-    static func write(value: S3ClientTypes.LambdaFunctionConfiguration?, to writer: SmithyXML.Writer) throws {
+    static func write(value: S3ClientTypes.ObjectLockRetention?, to writer: SmithyXML.Writer) throws {
         guard let value else { return }
-        try writer["Event"].writeList(value.events, memberWritingClosure: SmithyReadWrite.WritingClosureBox<S3ClientTypes.Event>().write(value:to:), memberNodeInfo: "member", isFlattened: true)
-        try writer["Filter"].write(value.filter, with: S3ClientTypes.NotificationConfigurationFilter.write(value:to:))
-        try writer["Id"].write(value.id)
-        try writer["CloudFunction"].write(value.lambdaFunctionArn)
+        try writer["Mode"].write(value.mode)
+        try writer["RetainUntilDate"].writeTimestamp(value.retainUntilDate, format: SmithyTimestamps.TimestampFormat.dateTime)
     }
 
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.LambdaFunctionConfiguration {
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.ObjectLockRetention {
         guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.LambdaFunctionConfiguration()
-        value.id = try reader["Id"].readIfPresent()
-        value.lambdaFunctionArn = try reader["CloudFunction"].readIfPresent() ?? ""
-        value.events = try reader["Event"].readListIfPresent(memberReadingClosure: SmithyReadWrite.ReadingClosureBox<S3ClientTypes.Event>().read(from:), memberNodeInfo: "member", isFlattened: true) ?? []
-        value.filter = try reader["Filter"].readIfPresent(with: S3ClientTypes.NotificationConfigurationFilter.read(from:))
+        var value = S3ClientTypes.ObjectLockRetention()
+        value.mode = try reader["Mode"].readIfPresent()
+        value.retainUntilDate = try reader["RetainUntilDate"].readTimestampIfPresent(format: SmithyTimestamps.TimestampFormat.dateTime)
         return value
     }
 }
 
-extension S3ClientTypes.EventBridgeConfiguration {
+extension S3ClientTypes.ObjectLockRule {
 
-    static func write(value: S3ClientTypes.EventBridgeConfiguration?, to writer: SmithyXML.Writer) throws {
-        guard value != nil else { return }
-        _ = writer[""]  // create an empty structure
+    static func write(value: S3ClientTypes.ObjectLockRule?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["DefaultRetention"].write(value.defaultRetention, with: S3ClientTypes.DefaultRetention.write(value:to:))
     }
 
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.EventBridgeConfiguration {
-        guard reader.hasContent || Mirror(reflecting: self).children.isEmpty else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        return S3ClientTypes.EventBridgeConfiguration()
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.ObjectLockRule {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.ObjectLockRule()
+        value.defaultRetention = try reader["DefaultRetention"].readIfPresent(with: S3ClientTypes.DefaultRetention.read(from:))
+        return value
+    }
+}
+
+extension S3ClientTypes.ObjectPart {
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.ObjectPart {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.ObjectPart()
+        value.partNumber = try reader["PartNumber"].readIfPresent()
+        value.size = try reader["Size"].readIfPresent()
+        value.checksumCRC32 = try reader["ChecksumCRC32"].readIfPresent()
+        value.checksumCRC32C = try reader["ChecksumCRC32C"].readIfPresent()
+        value.checksumCRC64NVME = try reader["ChecksumCRC64NVME"].readIfPresent()
+        value.checksumSHA1 = try reader["ChecksumSHA1"].readIfPresent()
+        value.checksumSHA256 = try reader["ChecksumSHA256"].readIfPresent()
+        return value
+    }
+}
+
+extension S3ClientTypes.ObjectVersion {
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.ObjectVersion {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.ObjectVersion()
+        value.eTag = try reader["ETag"].readIfPresent()
+        value.checksumAlgorithm = try reader["ChecksumAlgorithm"].readListIfPresent(memberReadingClosure: SmithyReadWrite.ReadingClosureBox<S3ClientTypes.ChecksumAlgorithm>().read(from:), memberNodeInfo: "member", isFlattened: true)
+        value.checksumType = try reader["ChecksumType"].readIfPresent()
+        value.size = try reader["Size"].readIfPresent()
+        value.storageClass = try reader["StorageClass"].readIfPresent()
+        value.key = try reader["Key"].readIfPresent()
+        value.versionId = try reader["VersionId"].readIfPresent()
+        value.isLatest = try reader["IsLatest"].readIfPresent()
+        value.lastModified = try reader["LastModified"].readTimestampIfPresent(format: SmithyTimestamps.TimestampFormat.dateTime)
+        value.owner = try reader["Owner"].readIfPresent(with: S3ClientTypes.Owner.read(from:))
+        value.restoreStatus = try reader["RestoreStatus"].readIfPresent(with: S3ClientTypes.RestoreStatus.read(from:))
+        return value
+    }
+}
+
+extension S3ClientTypes.OutputLocation {
+
+    static func write(value: S3ClientTypes.OutputLocation?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["S3"].write(value.s3, with: S3ClientTypes.S3Location.write(value:to:))
+    }
+}
+
+extension S3ClientTypes.OutputSerialization {
+
+    static func write(value: S3ClientTypes.OutputSerialization?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["CSV"].write(value.csv, with: S3ClientTypes.CSVOutput.write(value:to:))
+        try writer["JSON"].write(value.json, with: S3ClientTypes.JSONOutput.write(value:to:))
+    }
+}
+
+extension S3ClientTypes.Owner {
+
+    static func write(value: S3ClientTypes.Owner?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["DisplayName"].write(value.displayName)
+        try writer["ID"].write(value.id)
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.Owner {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.Owner()
+        value.displayName = try reader["DisplayName"].readIfPresent()
+        value.id = try reader["ID"].readIfPresent()
+        return value
     }
 }
 
@@ -22940,12 +23512,199 @@ extension S3ClientTypes.OwnershipControlsRule {
     }
 }
 
+extension S3ClientTypes.ParquetInput {
+
+    static func write(value: S3ClientTypes.ParquetInput?, to writer: SmithyXML.Writer) throws {
+        guard value != nil else { return }
+        _ = writer[""]  // create an empty structure
+    }
+}
+
+extension S3ClientTypes.Part {
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.Part {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.Part()
+        value.partNumber = try reader["PartNumber"].readIfPresent()
+        value.lastModified = try reader["LastModified"].readTimestampIfPresent(format: SmithyTimestamps.TimestampFormat.dateTime)
+        value.eTag = try reader["ETag"].readIfPresent()
+        value.size = try reader["Size"].readIfPresent()
+        value.checksumCRC32 = try reader["ChecksumCRC32"].readIfPresent()
+        value.checksumCRC32C = try reader["ChecksumCRC32C"].readIfPresent()
+        value.checksumCRC64NVME = try reader["ChecksumCRC64NVME"].readIfPresent()
+        value.checksumSHA1 = try reader["ChecksumSHA1"].readIfPresent()
+        value.checksumSHA256 = try reader["ChecksumSHA256"].readIfPresent()
+        return value
+    }
+}
+
+extension S3ClientTypes.PartitionedPrefix {
+
+    static func write(value: S3ClientTypes.PartitionedPrefix?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["PartitionDateSource"].write(value.partitionDateSource)
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.PartitionedPrefix {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.PartitionedPrefix()
+        value.partitionDateSource = try reader["PartitionDateSource"].readIfPresent()
+        return value
+    }
+}
+
 extension S3ClientTypes.PolicyStatus {
 
     static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.PolicyStatus {
         guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
         var value = S3ClientTypes.PolicyStatus()
         value.isPublic = try reader["IsPublic"].readIfPresent()
+        return value
+    }
+}
+
+extension S3ClientTypes.Progress {
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.Progress {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.Progress()
+        value.bytesScanned = try reader["BytesScanned"].readIfPresent()
+        value.bytesProcessed = try reader["BytesProcessed"].readIfPresent()
+        value.bytesReturned = try reader["BytesReturned"].readIfPresent()
+        return value
+    }
+}
+
+extension S3ClientTypes.ProgressEvent {
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.ProgressEvent {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.ProgressEvent()
+        value.details = try reader["Details"].readIfPresent(with: S3ClientTypes.Progress.read(from:))
+        return value
+    }
+}
+
+extension S3ClientTypes.PublicAccessBlockConfiguration {
+
+    static func write(value: S3ClientTypes.PublicAccessBlockConfiguration?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["BlockPublicAcls"].write(value.blockPublicAcls)
+        try writer["BlockPublicPolicy"].write(value.blockPublicPolicy)
+        try writer["IgnorePublicAcls"].write(value.ignorePublicAcls)
+        try writer["RestrictPublicBuckets"].write(value.restrictPublicBuckets)
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.PublicAccessBlockConfiguration {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.PublicAccessBlockConfiguration()
+        value.blockPublicAcls = try reader["BlockPublicAcls"].readIfPresent()
+        value.ignorePublicAcls = try reader["IgnorePublicAcls"].readIfPresent()
+        value.blockPublicPolicy = try reader["BlockPublicPolicy"].readIfPresent()
+        value.restrictPublicBuckets = try reader["RestrictPublicBuckets"].readIfPresent()
+        return value
+    }
+}
+
+extension S3ClientTypes.QueueConfiguration {
+
+    static func write(value: S3ClientTypes.QueueConfiguration?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["Event"].writeList(value.events, memberWritingClosure: SmithyReadWrite.WritingClosureBox<S3ClientTypes.Event>().write(value:to:), memberNodeInfo: "member", isFlattened: true)
+        try writer["Filter"].write(value.filter, with: S3ClientTypes.NotificationConfigurationFilter.write(value:to:))
+        try writer["Id"].write(value.id)
+        try writer["Queue"].write(value.queueArn)
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.QueueConfiguration {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.QueueConfiguration()
+        value.id = try reader["Id"].readIfPresent()
+        value.queueArn = try reader["Queue"].readIfPresent() ?? ""
+        value.events = try reader["Event"].readListIfPresent(memberReadingClosure: SmithyReadWrite.ReadingClosureBox<S3ClientTypes.Event>().read(from:), memberNodeInfo: "member", isFlattened: true) ?? []
+        value.filter = try reader["Filter"].readIfPresent(with: S3ClientTypes.NotificationConfigurationFilter.read(from:))
+        return value
+    }
+}
+
+extension S3ClientTypes.RecordExpiration {
+
+    static func write(value: S3ClientTypes.RecordExpiration?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["Days"].write(value.days)
+        try writer["Expiration"].write(value.expiration)
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.RecordExpiration {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.RecordExpiration()
+        value.expiration = try reader["Expiration"].readIfPresent() ?? .sdkUnknown("")
+        value.days = try reader["Days"].readIfPresent()
+        return value
+    }
+}
+
+extension S3ClientTypes.RecordsEvent {
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.RecordsEvent {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.RecordsEvent()
+        value.payload = try reader["Payload"].readIfPresent()
+        return value
+    }
+}
+
+extension S3ClientTypes.Redirect {
+
+    static func write(value: S3ClientTypes.Redirect?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["HostName"].write(value.hostName)
+        try writer["HttpRedirectCode"].write(value.httpRedirectCode)
+        try writer["Protocol"].write(value.`protocol`)
+        try writer["ReplaceKeyPrefixWith"].write(value.replaceKeyPrefixWith)
+        try writer["ReplaceKeyWith"].write(value.replaceKeyWith)
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.Redirect {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.Redirect()
+        value.hostName = try reader["HostName"].readIfPresent()
+        value.httpRedirectCode = try reader["HttpRedirectCode"].readIfPresent()
+        value.`protocol` = try reader["Protocol"].readIfPresent()
+        value.replaceKeyPrefixWith = try reader["ReplaceKeyPrefixWith"].readIfPresent()
+        value.replaceKeyWith = try reader["ReplaceKeyWith"].readIfPresent()
+        return value
+    }
+}
+
+extension S3ClientTypes.RedirectAllRequestsTo {
+
+    static func write(value: S3ClientTypes.RedirectAllRequestsTo?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["HostName"].write(value.hostName)
+        try writer["Protocol"].write(value.`protocol`)
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.RedirectAllRequestsTo {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.RedirectAllRequestsTo()
+        value.hostName = try reader["HostName"].readIfPresent() ?? ""
+        value.`protocol` = try reader["Protocol"].readIfPresent()
+        return value
+    }
+}
+
+extension S3ClientTypes.ReplicaModifications {
+
+    static func write(value: S3ClientTypes.ReplicaModifications?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["Status"].write(value.status)
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.ReplicaModifications {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.ReplicaModifications()
+        value.status = try reader["Status"].readIfPresent() ?? .sdkUnknown("")
         return value
     }
 }
@@ -22998,185 +23757,19 @@ extension S3ClientTypes.ReplicationRule {
     }
 }
 
-extension S3ClientTypes.DeleteMarkerReplication {
+extension S3ClientTypes.ReplicationRuleAndOperator {
 
-    static func write(value: S3ClientTypes.DeleteMarkerReplication?, to writer: SmithyXML.Writer) throws {
+    static func write(value: S3ClientTypes.ReplicationRuleAndOperator?, to writer: SmithyXML.Writer) throws {
         guard let value else { return }
-        try writer["Status"].write(value.status)
+        try writer["Prefix"].write(value.`prefix`)
+        try writer["Tag"].writeList(value.tags, memberWritingClosure: S3ClientTypes.Tag.write(value:to:), memberNodeInfo: "Tag", isFlattened: true)
     }
 
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.DeleteMarkerReplication {
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.ReplicationRuleAndOperator {
         guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.DeleteMarkerReplication()
-        value.status = try reader["Status"].readIfPresent()
-        return value
-    }
-}
-
-extension S3ClientTypes.Destination {
-
-    static func write(value: S3ClientTypes.Destination?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["AccessControlTranslation"].write(value.accessControlTranslation, with: S3ClientTypes.AccessControlTranslation.write(value:to:))
-        try writer["Account"].write(value.account)
-        try writer["Bucket"].write(value.bucket)
-        try writer["EncryptionConfiguration"].write(value.encryptionConfiguration, with: S3ClientTypes.EncryptionConfiguration.write(value:to:))
-        try writer["Metrics"].write(value.metrics, with: S3ClientTypes.Metrics.write(value:to:))
-        try writer["ReplicationTime"].write(value.replicationTime, with: S3ClientTypes.ReplicationTime.write(value:to:))
-        try writer["StorageClass"].write(value.storageClass)
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.Destination {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.Destination()
-        value.bucket = try reader["Bucket"].readIfPresent() ?? ""
-        value.account = try reader["Account"].readIfPresent()
-        value.storageClass = try reader["StorageClass"].readIfPresent()
-        value.accessControlTranslation = try reader["AccessControlTranslation"].readIfPresent(with: S3ClientTypes.AccessControlTranslation.read(from:))
-        value.encryptionConfiguration = try reader["EncryptionConfiguration"].readIfPresent(with: S3ClientTypes.EncryptionConfiguration.read(from:))
-        value.replicationTime = try reader["ReplicationTime"].readIfPresent(with: S3ClientTypes.ReplicationTime.read(from:))
-        value.metrics = try reader["Metrics"].readIfPresent(with: S3ClientTypes.Metrics.read(from:))
-        return value
-    }
-}
-
-extension S3ClientTypes.Metrics {
-
-    static func write(value: S3ClientTypes.Metrics?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["EventThreshold"].write(value.eventThreshold, with: S3ClientTypes.ReplicationTimeValue.write(value:to:))
-        try writer["Status"].write(value.status)
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.Metrics {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.Metrics()
-        value.status = try reader["Status"].readIfPresent() ?? .sdkUnknown("")
-        value.eventThreshold = try reader["EventThreshold"].readIfPresent(with: S3ClientTypes.ReplicationTimeValue.read(from:))
-        return value
-    }
-}
-
-extension S3ClientTypes.ReplicationTimeValue {
-
-    static func write(value: S3ClientTypes.ReplicationTimeValue?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["Minutes"].write(value.minutes)
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.ReplicationTimeValue {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.ReplicationTimeValue()
-        value.minutes = try reader["Minutes"].readIfPresent()
-        return value
-    }
-}
-
-extension S3ClientTypes.ReplicationTime {
-
-    static func write(value: S3ClientTypes.ReplicationTime?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["Status"].write(value.status)
-        try writer["Time"].write(value.time, with: S3ClientTypes.ReplicationTimeValue.write(value:to:))
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.ReplicationTime {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.ReplicationTime()
-        value.status = try reader["Status"].readIfPresent() ?? .sdkUnknown("")
-        value.time = try reader["Time"].readIfPresent(with: S3ClientTypes.ReplicationTimeValue.read(from:))
-        return value
-    }
-}
-
-extension S3ClientTypes.EncryptionConfiguration {
-
-    static func write(value: S3ClientTypes.EncryptionConfiguration?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["ReplicaKmsKeyID"].write(value.replicaKmsKeyID)
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.EncryptionConfiguration {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.EncryptionConfiguration()
-        value.replicaKmsKeyID = try reader["ReplicaKmsKeyID"].readIfPresent()
-        return value
-    }
-}
-
-extension S3ClientTypes.AccessControlTranslation {
-
-    static func write(value: S3ClientTypes.AccessControlTranslation?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["Owner"].write(value.owner)
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.AccessControlTranslation {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.AccessControlTranslation()
-        value.owner = try reader["Owner"].readIfPresent() ?? .sdkUnknown("")
-        return value
-    }
-}
-
-extension S3ClientTypes.ExistingObjectReplication {
-
-    static func write(value: S3ClientTypes.ExistingObjectReplication?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["Status"].write(value.status)
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.ExistingObjectReplication {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.ExistingObjectReplication()
-        value.status = try reader["Status"].readIfPresent() ?? .sdkUnknown("")
-        return value
-    }
-}
-
-extension S3ClientTypes.SourceSelectionCriteria {
-
-    static func write(value: S3ClientTypes.SourceSelectionCriteria?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["ReplicaModifications"].write(value.replicaModifications, with: S3ClientTypes.ReplicaModifications.write(value:to:))
-        try writer["SseKmsEncryptedObjects"].write(value.sseKmsEncryptedObjects, with: S3ClientTypes.SseKmsEncryptedObjects.write(value:to:))
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.SourceSelectionCriteria {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.SourceSelectionCriteria()
-        value.sseKmsEncryptedObjects = try reader["SseKmsEncryptedObjects"].readIfPresent(with: S3ClientTypes.SseKmsEncryptedObjects.read(from:))
-        value.replicaModifications = try reader["ReplicaModifications"].readIfPresent(with: S3ClientTypes.ReplicaModifications.read(from:))
-        return value
-    }
-}
-
-extension S3ClientTypes.ReplicaModifications {
-
-    static func write(value: S3ClientTypes.ReplicaModifications?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["Status"].write(value.status)
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.ReplicaModifications {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.ReplicaModifications()
-        value.status = try reader["Status"].readIfPresent() ?? .sdkUnknown("")
-        return value
-    }
-}
-
-extension S3ClientTypes.SseKmsEncryptedObjects {
-
-    static func write(value: S3ClientTypes.SseKmsEncryptedObjects?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["Status"].write(value.status)
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.SseKmsEncryptedObjects {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.SseKmsEncryptedObjects()
-        value.status = try reader["Status"].readIfPresent() ?? .sdkUnknown("")
+        var value = S3ClientTypes.ReplicationRuleAndOperator()
+        value.`prefix` = try reader["Prefix"].readIfPresent()
+        value.tags = try reader["Tag"].readListIfPresent(memberReadingClosure: S3ClientTypes.Tag.read(from:), memberNodeInfo: "Tag", isFlattened: true)
         return value
     }
 }
@@ -23200,66 +23793,75 @@ extension S3ClientTypes.ReplicationRuleFilter {
     }
 }
 
-extension S3ClientTypes.ReplicationRuleAndOperator {
+extension S3ClientTypes.ReplicationTime {
 
-    static func write(value: S3ClientTypes.ReplicationRuleAndOperator?, to writer: SmithyXML.Writer) throws {
+    static func write(value: S3ClientTypes.ReplicationTime?, to writer: SmithyXML.Writer) throws {
         guard let value else { return }
-        try writer["Prefix"].write(value.`prefix`)
-        try writer["Tag"].writeList(value.tags, memberWritingClosure: S3ClientTypes.Tag.write(value:to:), memberNodeInfo: "Tag", isFlattened: true)
+        try writer["Status"].write(value.status)
+        try writer["Time"].write(value.time, with: S3ClientTypes.ReplicationTimeValue.write(value:to:))
     }
 
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.ReplicationRuleAndOperator {
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.ReplicationTime {
         guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.ReplicationRuleAndOperator()
-        value.`prefix` = try reader["Prefix"].readIfPresent()
-        value.tags = try reader["Tag"].readListIfPresent(memberReadingClosure: S3ClientTypes.Tag.read(from:), memberNodeInfo: "Tag", isFlattened: true)
+        var value = S3ClientTypes.ReplicationTime()
+        value.status = try reader["Status"].readIfPresent() ?? .sdkUnknown("")
+        value.time = try reader["Time"].readIfPresent(with: S3ClientTypes.ReplicationTimeValue.read(from:))
         return value
     }
 }
 
-extension S3ClientTypes.RedirectAllRequestsTo {
+extension S3ClientTypes.ReplicationTimeValue {
 
-    static func write(value: S3ClientTypes.RedirectAllRequestsTo?, to writer: SmithyXML.Writer) throws {
+    static func write(value: S3ClientTypes.ReplicationTimeValue?, to writer: SmithyXML.Writer) throws {
         guard let value else { return }
-        try writer["HostName"].write(value.hostName)
-        try writer["Protocol"].write(value.`protocol`)
+        try writer["Minutes"].write(value.minutes)
     }
 
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.RedirectAllRequestsTo {
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.ReplicationTimeValue {
         guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.RedirectAllRequestsTo()
-        value.hostName = try reader["HostName"].readIfPresent() ?? ""
-        value.`protocol` = try reader["Protocol"].readIfPresent()
+        var value = S3ClientTypes.ReplicationTimeValue()
+        value.minutes = try reader["Minutes"].readIfPresent()
         return value
     }
 }
 
-extension S3ClientTypes.IndexDocument {
+extension S3ClientTypes.RequestPaymentConfiguration {
 
-    static func write(value: S3ClientTypes.IndexDocument?, to writer: SmithyXML.Writer) throws {
+    static func write(value: S3ClientTypes.RequestPaymentConfiguration?, to writer: SmithyXML.Writer) throws {
         guard let value else { return }
-        try writer["Suffix"].write(value.suffix)
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.IndexDocument {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.IndexDocument()
-        value.suffix = try reader["Suffix"].readIfPresent() ?? ""
-        return value
+        try writer["Payer"].write(value.payer)
     }
 }
 
-extension S3ClientTypes.ErrorDocument {
+extension S3ClientTypes.RequestProgress {
 
-    static func write(value: S3ClientTypes.ErrorDocument?, to writer: SmithyXML.Writer) throws {
+    static func write(value: S3ClientTypes.RequestProgress?, to writer: SmithyXML.Writer) throws {
         guard let value else { return }
-        try writer["Key"].write(value.key)
+        try writer["Enabled"].write(value.enabled)
     }
+}
 
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.ErrorDocument {
+extension S3ClientTypes.RestoreRequest {
+
+    static func write(value: S3ClientTypes.RestoreRequest?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["Days"].write(value.days)
+        try writer["Description"].write(value.description)
+        try writer["GlacierJobParameters"].write(value.glacierJobParameters, with: S3ClientTypes.GlacierJobParameters.write(value:to:))
+        try writer["OutputLocation"].write(value.outputLocation, with: S3ClientTypes.OutputLocation.write(value:to:))
+        try writer["SelectParameters"].write(value.selectParameters, with: S3ClientTypes.SelectParameters.write(value:to:))
+        try writer["Tier"].write(value.tier)
+        try writer["Type"].write(value.type)
+    }
+}
+
+extension S3ClientTypes.RestoreStatus {
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.RestoreStatus {
         guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.ErrorDocument()
-        value.key = try reader["Key"].readIfPresent() ?? ""
+        var value = S3ClientTypes.RestoreStatus()
+        value.isRestoreInProgress = try reader["IsRestoreInProgress"].readIfPresent()
+        value.restoreExpiryDate = try reader["RestoreExpiryDate"].readTimestampIfPresent(format: SmithyTimestamps.TimestampFormat.dateTime)
         return value
     }
 }
@@ -23281,359 +23883,229 @@ extension S3ClientTypes.RoutingRule {
     }
 }
 
-extension S3ClientTypes.Redirect {
+extension S3ClientTypes.S3KeyFilter {
 
-    static func write(value: S3ClientTypes.Redirect?, to writer: SmithyXML.Writer) throws {
+    static func write(value: S3ClientTypes.S3KeyFilter?, to writer: SmithyXML.Writer) throws {
         guard let value else { return }
-        try writer["HostName"].write(value.hostName)
-        try writer["HttpRedirectCode"].write(value.httpRedirectCode)
-        try writer["Protocol"].write(value.`protocol`)
-        try writer["ReplaceKeyPrefixWith"].write(value.replaceKeyPrefixWith)
-        try writer["ReplaceKeyWith"].write(value.replaceKeyWith)
+        try writer["FilterRule"].writeList(value.filterRules, memberWritingClosure: S3ClientTypes.FilterRule.write(value:to:), memberNodeInfo: "member", isFlattened: true)
     }
 
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.Redirect {
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.S3KeyFilter {
         guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.Redirect()
-        value.hostName = try reader["HostName"].readIfPresent()
-        value.httpRedirectCode = try reader["HttpRedirectCode"].readIfPresent()
-        value.`protocol` = try reader["Protocol"].readIfPresent()
-        value.replaceKeyPrefixWith = try reader["ReplaceKeyPrefixWith"].readIfPresent()
-        value.replaceKeyWith = try reader["ReplaceKeyWith"].readIfPresent()
+        var value = S3ClientTypes.S3KeyFilter()
+        value.filterRules = try reader["FilterRule"].readListIfPresent(memberReadingClosure: S3ClientTypes.FilterRule.read(from:), memberNodeInfo: "member", isFlattened: true)
         return value
     }
 }
 
-extension S3ClientTypes.Condition {
+extension S3ClientTypes.S3Location {
 
-    static func write(value: S3ClientTypes.Condition?, to writer: SmithyXML.Writer) throws {
+    static func write(value: S3ClientTypes.S3Location?, to writer: SmithyXML.Writer) throws {
         guard let value else { return }
-        try writer["HttpErrorCodeReturnedEquals"].write(value.httpErrorCodeReturnedEquals)
-        try writer["KeyPrefixEquals"].write(value.keyPrefixEquals)
+        try writer["AccessControlList"].writeList(value.accessControlList, memberWritingClosure: S3ClientTypes.Grant.write(value:to:), memberNodeInfo: "Grant", isFlattened: false)
+        try writer["BucketName"].write(value.bucketName)
+        try writer["CannedACL"].write(value.cannedACL)
+        try writer["Encryption"].write(value.encryption, with: S3ClientTypes.Encryption.write(value:to:))
+        try writer["Prefix"].write(value.`prefix`)
+        try writer["StorageClass"].write(value.storageClass)
+        try writer["Tagging"].write(value.tagging, with: S3ClientTypes.Tagging.write(value:to:))
+        try writer["UserMetadata"].writeList(value.userMetadata, memberWritingClosure: S3ClientTypes.MetadataEntry.write(value:to:), memberNodeInfo: "MetadataEntry", isFlattened: false)
     }
+}
 
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.Condition {
+extension S3ClientTypes.S3TablesDestination {
+
+    static func write(value: S3ClientTypes.S3TablesDestination?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["TableBucketArn"].write(value.tableBucketArn)
+        try writer["TableName"].write(value.tableName)
+    }
+}
+
+extension S3ClientTypes.S3TablesDestinationResult {
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.S3TablesDestinationResult {
         guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.Condition()
-        value.httpErrorCodeReturnedEquals = try reader["HttpErrorCodeReturnedEquals"].readIfPresent()
-        value.keyPrefixEquals = try reader["KeyPrefixEquals"].readIfPresent()
+        var value = S3ClientTypes.S3TablesDestinationResult()
+        value.tableBucketArn = try reader["TableBucketArn"].readIfPresent() ?? ""
+        value.tableName = try reader["TableName"].readIfPresent() ?? ""
+        value.tableArn = try reader["TableArn"].readIfPresent() ?? ""
+        value.tableNamespace = try reader["TableNamespace"].readIfPresent() ?? ""
         return value
     }
 }
 
-extension S3ClientTypes.Checksum {
+extension S3ClientTypes.ScanRange {
 
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.Checksum {
+    static func write(value: S3ClientTypes.ScanRange?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["End"].write(value.end)
+        try writer["Start"].write(value.start)
+    }
+}
+
+extension S3ClientTypes.SelectParameters {
+
+    static func write(value: S3ClientTypes.SelectParameters?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["Expression"].write(value.expression)
+        try writer["ExpressionType"].write(value.expressionType)
+        try writer["InputSerialization"].write(value.inputSerialization, with: S3ClientTypes.InputSerialization.write(value:to:))
+        try writer["OutputSerialization"].write(value.outputSerialization, with: S3ClientTypes.OutputSerialization.write(value:to:))
+    }
+}
+
+extension S3ClientTypes.ServerSideEncryptionByDefault {
+
+    static func write(value: S3ClientTypes.ServerSideEncryptionByDefault?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["KMSMasterKeyID"].write(value.kmsMasterKeyID)
+        try writer["SSEAlgorithm"].write(value.sseAlgorithm)
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.ServerSideEncryptionByDefault {
         guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.Checksum()
-        value.checksumCRC32 = try reader["ChecksumCRC32"].readIfPresent()
-        value.checksumCRC32C = try reader["ChecksumCRC32C"].readIfPresent()
-        value.checksumCRC64NVME = try reader["ChecksumCRC64NVME"].readIfPresent()
-        value.checksumSHA1 = try reader["ChecksumSHA1"].readIfPresent()
-        value.checksumSHA256 = try reader["ChecksumSHA256"].readIfPresent()
-        value.checksumType = try reader["ChecksumType"].readIfPresent()
+        var value = S3ClientTypes.ServerSideEncryptionByDefault()
+        value.sseAlgorithm = try reader["SSEAlgorithm"].readIfPresent() ?? .sdkUnknown("")
+        value.kmsMasterKeyID = try reader["KMSMasterKeyID"].readIfPresent()
         return value
     }
 }
 
-extension S3ClientTypes.GetObjectAttributesParts {
+extension S3ClientTypes.ServerSideEncryptionConfiguration {
 
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.GetObjectAttributesParts {
+    static func write(value: S3ClientTypes.ServerSideEncryptionConfiguration?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["Rule"].writeList(value.rules, memberWritingClosure: S3ClientTypes.ServerSideEncryptionRule.write(value:to:), memberNodeInfo: "member", isFlattened: true)
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.ServerSideEncryptionConfiguration {
         guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.GetObjectAttributesParts()
-        value.totalPartsCount = try reader["PartsCount"].readIfPresent()
-        value.partNumberMarker = try reader["PartNumberMarker"].readIfPresent()
-        value.nextPartNumberMarker = try reader["NextPartNumberMarker"].readIfPresent()
-        value.maxParts = try reader["MaxParts"].readIfPresent()
-        value.isTruncated = try reader["IsTruncated"].readIfPresent()
-        value.parts = try reader["Part"].readListIfPresent(memberReadingClosure: S3ClientTypes.ObjectPart.read(from:), memberNodeInfo: "member", isFlattened: true)
+        var value = S3ClientTypes.ServerSideEncryptionConfiguration()
+        value.rules = try reader["Rule"].readListIfPresent(memberReadingClosure: S3ClientTypes.ServerSideEncryptionRule.read(from:), memberNodeInfo: "member", isFlattened: true) ?? []
         return value
     }
 }
 
-extension S3ClientTypes.ObjectPart {
+extension S3ClientTypes.ServerSideEncryptionRule {
 
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.ObjectPart {
+    static func write(value: S3ClientTypes.ServerSideEncryptionRule?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["ApplyServerSideEncryptionByDefault"].write(value.applyServerSideEncryptionByDefault, with: S3ClientTypes.ServerSideEncryptionByDefault.write(value:to:))
+        try writer["BlockedEncryptionTypes"].write(value.blockedEncryptionTypes, with: S3ClientTypes.BlockedEncryptionTypes.write(value:to:))
+        try writer["BucketKeyEnabled"].write(value.bucketKeyEnabled)
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.ServerSideEncryptionRule {
         guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.ObjectPart()
-        value.partNumber = try reader["PartNumber"].readIfPresent()
-        value.size = try reader["Size"].readIfPresent()
-        value.checksumCRC32 = try reader["ChecksumCRC32"].readIfPresent()
-        value.checksumCRC32C = try reader["ChecksumCRC32C"].readIfPresent()
-        value.checksumCRC64NVME = try reader["ChecksumCRC64NVME"].readIfPresent()
-        value.checksumSHA1 = try reader["ChecksumSHA1"].readIfPresent()
-        value.checksumSHA256 = try reader["ChecksumSHA256"].readIfPresent()
+        var value = S3ClientTypes.ServerSideEncryptionRule()
+        value.applyServerSideEncryptionByDefault = try reader["ApplyServerSideEncryptionByDefault"].readIfPresent(with: S3ClientTypes.ServerSideEncryptionByDefault.read(from:))
+        value.bucketKeyEnabled = try reader["BucketKeyEnabled"].readIfPresent()
+        value.blockedEncryptionTypes = try reader["BlockedEncryptionTypes"].readIfPresent(with: S3ClientTypes.BlockedEncryptionTypes.read(from:))
         return value
     }
 }
 
-extension S3ClientTypes.ObjectLockLegalHold {
+extension S3ClientTypes.SessionCredentials {
 
-    static func write(value: S3ClientTypes.ObjectLockLegalHold?, to writer: SmithyXML.Writer) throws {
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.SessionCredentials {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.SessionCredentials()
+        value.accessKeyId = try reader["AccessKeyId"].readIfPresent() ?? ""
+        value.secretAccessKey = try reader["SecretAccessKey"].readIfPresent() ?? ""
+        value.sessionToken = try reader["SessionToken"].readIfPresent() ?? ""
+        value.expiration = try reader["Expiration"].readTimestampIfPresent(format: SmithyTimestamps.TimestampFormat.dateTime) ?? SmithyTimestamps.TimestampFormatter(format: .dateTime).date(from: "1970-01-01T00:00:00Z")
+        return value
+    }
+}
+
+extension S3ClientTypes.SimplePrefix {
+
+    static func write(value: S3ClientTypes.SimplePrefix?, to writer: SmithyXML.Writer) throws {
+        guard value != nil else { return }
+        _ = writer[""]  // create an empty structure
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.SimplePrefix {
+        guard reader.hasContent || Mirror(reflecting: self).children.isEmpty else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        return S3ClientTypes.SimplePrefix()
+    }
+}
+
+extension S3ClientTypes.SourceSelectionCriteria {
+
+    static func write(value: S3ClientTypes.SourceSelectionCriteria?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["ReplicaModifications"].write(value.replicaModifications, with: S3ClientTypes.ReplicaModifications.write(value:to:))
+        try writer["SseKmsEncryptedObjects"].write(value.sseKmsEncryptedObjects, with: S3ClientTypes.SseKmsEncryptedObjects.write(value:to:))
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.SourceSelectionCriteria {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.SourceSelectionCriteria()
+        value.sseKmsEncryptedObjects = try reader["SseKmsEncryptedObjects"].readIfPresent(with: S3ClientTypes.SseKmsEncryptedObjects.read(from:))
+        value.replicaModifications = try reader["ReplicaModifications"].readIfPresent(with: S3ClientTypes.ReplicaModifications.read(from:))
+        return value
+    }
+}
+
+extension S3ClientTypes.SSEKMS {
+
+    static func write(value: S3ClientTypes.SSEKMS?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["KeyId"].write(value.keyId)
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.SSEKMS {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.SSEKMS()
+        value.keyId = try reader["KeyId"].readIfPresent() ?? ""
+        return value
+    }
+}
+
+extension S3ClientTypes.SseKmsEncryptedObjects {
+
+    static func write(value: S3ClientTypes.SseKmsEncryptedObjects?, to writer: SmithyXML.Writer) throws {
         guard let value else { return }
         try writer["Status"].write(value.status)
     }
 
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.ObjectLockLegalHold {
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.SseKmsEncryptedObjects {
         guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.ObjectLockLegalHold()
-        value.status = try reader["Status"].readIfPresent()
+        var value = S3ClientTypes.SseKmsEncryptedObjects()
+        value.status = try reader["Status"].readIfPresent() ?? .sdkUnknown("")
         return value
     }
 }
 
-extension S3ClientTypes.ObjectLockConfiguration {
+extension S3ClientTypes.SSEKMSEncryption {
 
-    static func write(value: S3ClientTypes.ObjectLockConfiguration?, to writer: SmithyXML.Writer) throws {
+    static func write(value: S3ClientTypes.SSEKMSEncryption?, to writer: SmithyXML.Writer) throws {
         guard let value else { return }
-        try writer["ObjectLockEnabled"].write(value.objectLockEnabled)
-        try writer["Rule"].write(value.rule, with: S3ClientTypes.ObjectLockRule.write(value:to:))
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.ObjectLockConfiguration {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.ObjectLockConfiguration()
-        value.objectLockEnabled = try reader["ObjectLockEnabled"].readIfPresent()
-        value.rule = try reader["Rule"].readIfPresent(with: S3ClientTypes.ObjectLockRule.read(from:))
-        return value
+        try writer["BucketKeyEnabled"].write(value.bucketKeyEnabled)
+        try writer["KMSKeyArn"].write(value.kmsKeyArn)
     }
 }
 
-extension S3ClientTypes.ObjectLockRule {
+extension S3ClientTypes.SSES3 {
 
-    static func write(value: S3ClientTypes.ObjectLockRule?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["DefaultRetention"].write(value.defaultRetention, with: S3ClientTypes.DefaultRetention.write(value:to:))
+    static func write(value: S3ClientTypes.SSES3?, to writer: SmithyXML.Writer) throws {
+        guard value != nil else { return }
+        _ = writer[""]  // create an empty structure
     }
 
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.ObjectLockRule {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.ObjectLockRule()
-        value.defaultRetention = try reader["DefaultRetention"].readIfPresent(with: S3ClientTypes.DefaultRetention.read(from:))
-        return value
-    }
-}
-
-extension S3ClientTypes.DefaultRetention {
-
-    static func write(value: S3ClientTypes.DefaultRetention?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["Days"].write(value.days)
-        try writer["Mode"].write(value.mode)
-        try writer["Years"].write(value.years)
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.DefaultRetention {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.DefaultRetention()
-        value.mode = try reader["Mode"].readIfPresent()
-        value.days = try reader["Days"].readIfPresent()
-        value.years = try reader["Years"].readIfPresent()
-        return value
-    }
-}
-
-extension S3ClientTypes.ObjectLockRetention {
-
-    static func write(value: S3ClientTypes.ObjectLockRetention?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["Mode"].write(value.mode)
-        try writer["RetainUntilDate"].writeTimestamp(value.retainUntilDate, format: SmithyTimestamps.TimestampFormat.dateTime)
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.ObjectLockRetention {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.ObjectLockRetention()
-        value.mode = try reader["Mode"].readIfPresent()
-        value.retainUntilDate = try reader["RetainUntilDate"].readTimestampIfPresent(format: SmithyTimestamps.TimestampFormat.dateTime)
-        return value
-    }
-}
-
-extension S3ClientTypes.PublicAccessBlockConfiguration {
-
-    static func write(value: S3ClientTypes.PublicAccessBlockConfiguration?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["BlockPublicAcls"].write(value.blockPublicAcls)
-        try writer["BlockPublicPolicy"].write(value.blockPublicPolicy)
-        try writer["IgnorePublicAcls"].write(value.ignorePublicAcls)
-        try writer["RestrictPublicBuckets"].write(value.restrictPublicBuckets)
-    }
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.PublicAccessBlockConfiguration {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.PublicAccessBlockConfiguration()
-        value.blockPublicAcls = try reader["BlockPublicAcls"].readIfPresent()
-        value.ignorePublicAcls = try reader["IgnorePublicAcls"].readIfPresent()
-        value.blockPublicPolicy = try reader["BlockPublicPolicy"].readIfPresent()
-        value.restrictPublicBuckets = try reader["RestrictPublicBuckets"].readIfPresent()
-        return value
-    }
-}
-
-extension S3ClientTypes.Bucket {
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.Bucket {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.Bucket()
-        value.name = try reader["Name"].readIfPresent()
-        value.creationDate = try reader["CreationDate"].readTimestampIfPresent(format: SmithyTimestamps.TimestampFormat.dateTime)
-        value.bucketRegion = try reader["BucketRegion"].readIfPresent()
-        value.bucketArn = try reader["BucketArn"].readIfPresent()
-        return value
-    }
-}
-
-extension S3ClientTypes.MultipartUpload {
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.MultipartUpload {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.MultipartUpload()
-        value.uploadId = try reader["UploadId"].readIfPresent()
-        value.key = try reader["Key"].readIfPresent()
-        value.initiated = try reader["Initiated"].readTimestampIfPresent(format: SmithyTimestamps.TimestampFormat.dateTime)
-        value.storageClass = try reader["StorageClass"].readIfPresent()
-        value.owner = try reader["Owner"].readIfPresent(with: S3ClientTypes.Owner.read(from:))
-        value.initiator = try reader["Initiator"].readIfPresent(with: S3ClientTypes.Initiator.read(from:))
-        value.checksumAlgorithm = try reader["ChecksumAlgorithm"].readIfPresent()
-        value.checksumType = try reader["ChecksumType"].readIfPresent()
-        return value
-    }
-}
-
-extension S3ClientTypes.Initiator {
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.Initiator {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.Initiator()
-        value.id = try reader["ID"].readIfPresent()
-        value.displayName = try reader["DisplayName"].readIfPresent()
-        return value
-    }
-}
-
-extension S3ClientTypes.CommonPrefix {
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.CommonPrefix {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.CommonPrefix()
-        value.`prefix` = try reader["Prefix"].readIfPresent()
-        return value
-    }
-}
-
-extension S3ClientTypes.Object {
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.Object {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.Object()
-        value.key = try reader["Key"].readIfPresent()
-        value.lastModified = try reader["LastModified"].readTimestampIfPresent(format: SmithyTimestamps.TimestampFormat.dateTime)
-        value.eTag = try reader["ETag"].readIfPresent()
-        value.checksumAlgorithm = try reader["ChecksumAlgorithm"].readListIfPresent(memberReadingClosure: SmithyReadWrite.ReadingClosureBox<S3ClientTypes.ChecksumAlgorithm>().read(from:), memberNodeInfo: "member", isFlattened: true)
-        value.checksumType = try reader["ChecksumType"].readIfPresent()
-        value.size = try reader["Size"].readIfPresent()
-        value.storageClass = try reader["StorageClass"].readIfPresent()
-        value.owner = try reader["Owner"].readIfPresent(with: S3ClientTypes.Owner.read(from:))
-        value.restoreStatus = try reader["RestoreStatus"].readIfPresent(with: S3ClientTypes.RestoreStatus.read(from:))
-        return value
-    }
-}
-
-extension S3ClientTypes.RestoreStatus {
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.RestoreStatus {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.RestoreStatus()
-        value.isRestoreInProgress = try reader["IsRestoreInProgress"].readIfPresent()
-        value.restoreExpiryDate = try reader["RestoreExpiryDate"].readTimestampIfPresent(format: SmithyTimestamps.TimestampFormat.dateTime)
-        return value
-    }
-}
-
-extension S3ClientTypes.ObjectVersion {
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.ObjectVersion {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.ObjectVersion()
-        value.eTag = try reader["ETag"].readIfPresent()
-        value.checksumAlgorithm = try reader["ChecksumAlgorithm"].readListIfPresent(memberReadingClosure: SmithyReadWrite.ReadingClosureBox<S3ClientTypes.ChecksumAlgorithm>().read(from:), memberNodeInfo: "member", isFlattened: true)
-        value.checksumType = try reader["ChecksumType"].readIfPresent()
-        value.size = try reader["Size"].readIfPresent()
-        value.storageClass = try reader["StorageClass"].readIfPresent()
-        value.key = try reader["Key"].readIfPresent()
-        value.versionId = try reader["VersionId"].readIfPresent()
-        value.isLatest = try reader["IsLatest"].readIfPresent()
-        value.lastModified = try reader["LastModified"].readTimestampIfPresent(format: SmithyTimestamps.TimestampFormat.dateTime)
-        value.owner = try reader["Owner"].readIfPresent(with: S3ClientTypes.Owner.read(from:))
-        value.restoreStatus = try reader["RestoreStatus"].readIfPresent(with: S3ClientTypes.RestoreStatus.read(from:))
-        return value
-    }
-}
-
-extension S3ClientTypes.DeleteMarkerEntry {
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.DeleteMarkerEntry {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.DeleteMarkerEntry()
-        value.owner = try reader["Owner"].readIfPresent(with: S3ClientTypes.Owner.read(from:))
-        value.key = try reader["Key"].readIfPresent()
-        value.versionId = try reader["VersionId"].readIfPresent()
-        value.isLatest = try reader["IsLatest"].readIfPresent()
-        value.lastModified = try reader["LastModified"].readTimestampIfPresent(format: SmithyTimestamps.TimestampFormat.dateTime)
-        return value
-    }
-}
-
-extension S3ClientTypes.Part {
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.Part {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.Part()
-        value.partNumber = try reader["PartNumber"].readIfPresent()
-        value.lastModified = try reader["LastModified"].readTimestampIfPresent(format: SmithyTimestamps.TimestampFormat.dateTime)
-        value.eTag = try reader["ETag"].readIfPresent()
-        value.size = try reader["Size"].readIfPresent()
-        value.checksumCRC32 = try reader["ChecksumCRC32"].readIfPresent()
-        value.checksumCRC32C = try reader["ChecksumCRC32C"].readIfPresent()
-        value.checksumCRC64NVME = try reader["ChecksumCRC64NVME"].readIfPresent()
-        value.checksumSHA1 = try reader["ChecksumSHA1"].readIfPresent()
-        value.checksumSHA256 = try reader["ChecksumSHA256"].readIfPresent()
-        return value
-    }
-}
-
-extension S3ClientTypes.EndEvent {
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.EndEvent {
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.SSES3 {
         guard reader.hasContent || Mirror(reflecting: self).children.isEmpty else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        return S3ClientTypes.EndEvent()
+        return S3ClientTypes.SSES3()
     }
 }
 
-extension S3ClientTypes.ContinuationEvent {
+extension S3ClientTypes.Stats {
 
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.ContinuationEvent {
-        guard reader.hasContent || Mirror(reflecting: self).children.isEmpty else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        return S3ClientTypes.ContinuationEvent()
-    }
-}
-
-extension S3ClientTypes.ProgressEvent {
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.ProgressEvent {
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.Stats {
         guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.ProgressEvent()
-        value.details = try reader["Details"].readIfPresent(with: S3ClientTypes.Progress.read(from:))
-        return value
-    }
-}
-
-extension S3ClientTypes.Progress {
-
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.Progress {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.Progress()
+        var value = S3ClientTypes.Stats()
         value.bytesScanned = try reader["BytesScanned"].readIfPresent()
         value.bytesProcessed = try reader["BytesProcessed"].readIfPresent()
         value.bytesReturned = try reader["BytesReturned"].readIfPresent()
@@ -23651,226 +24123,52 @@ extension S3ClientTypes.StatsEvent {
     }
 }
 
-extension S3ClientTypes.Stats {
+extension S3ClientTypes.StorageClassAnalysis {
 
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.Stats {
+    static func write(value: S3ClientTypes.StorageClassAnalysis?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["DataExport"].write(value.dataExport, with: S3ClientTypes.StorageClassAnalysisDataExport.write(value:to:))
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.StorageClassAnalysis {
         guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.Stats()
-        value.bytesScanned = try reader["BytesScanned"].readIfPresent()
-        value.bytesProcessed = try reader["BytesProcessed"].readIfPresent()
-        value.bytesReturned = try reader["BytesReturned"].readIfPresent()
+        var value = S3ClientTypes.StorageClassAnalysis()
+        value.dataExport = try reader["DataExport"].readIfPresent(with: S3ClientTypes.StorageClassAnalysisDataExport.read(from:))
         return value
     }
 }
 
-extension S3ClientTypes.RecordsEvent {
+extension S3ClientTypes.StorageClassAnalysisDataExport {
 
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.RecordsEvent {
+    static func write(value: S3ClientTypes.StorageClassAnalysisDataExport?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["Destination"].write(value.destination, with: S3ClientTypes.AnalyticsExportDestination.write(value:to:))
+        try writer["OutputSchemaVersion"].write(value.outputSchemaVersion)
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.StorageClassAnalysisDataExport {
         guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.RecordsEvent()
-        value.payload = try reader["Payload"].readIfPresent()
+        var value = S3ClientTypes.StorageClassAnalysisDataExport()
+        value.outputSchemaVersion = try reader["OutputSchemaVersion"].readIfPresent() ?? .sdkUnknown("")
+        value.destination = try reader["Destination"].readIfPresent(with: S3ClientTypes.AnalyticsExportDestination.read(from:))
         return value
     }
 }
 
-extension S3ClientTypes.CopyPartResult {
+extension S3ClientTypes.Tag {
 
-    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.CopyPartResult {
-        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
-        var value = S3ClientTypes.CopyPartResult()
-        value.eTag = try reader["ETag"].readIfPresent()
-        value.lastModified = try reader["LastModified"].readTimestampIfPresent(format: SmithyTimestamps.TimestampFormat.dateTime)
-        value.checksumCRC32 = try reader["ChecksumCRC32"].readIfPresent()
-        value.checksumCRC32C = try reader["ChecksumCRC32C"].readIfPresent()
-        value.checksumCRC64NVME = try reader["ChecksumCRC64NVME"].readIfPresent()
-        value.checksumSHA1 = try reader["ChecksumSHA1"].readIfPresent()
-        value.checksumSHA256 = try reader["ChecksumSHA256"].readIfPresent()
-        return value
-    }
-}
-
-extension S3ClientTypes.CompletedMultipartUpload {
-
-    static func write(value: S3ClientTypes.CompletedMultipartUpload?, to writer: SmithyXML.Writer) throws {
+    static func write(value: S3ClientTypes.Tag?, to writer: SmithyXML.Writer) throws {
         guard let value else { return }
-        try writer["Part"].writeList(value.parts, memberWritingClosure: S3ClientTypes.CompletedPart.write(value:to:), memberNodeInfo: "member", isFlattened: true)
-    }
-}
-
-extension S3ClientTypes.CompletedPart {
-
-    static func write(value: S3ClientTypes.CompletedPart?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["ChecksumCRC32"].write(value.checksumCRC32)
-        try writer["ChecksumCRC32C"].write(value.checksumCRC32C)
-        try writer["ChecksumCRC64NVME"].write(value.checksumCRC64NVME)
-        try writer["ChecksumSHA1"].write(value.checksumSHA1)
-        try writer["ChecksumSHA256"].write(value.checksumSHA256)
-        try writer["ETag"].write(value.eTag)
-        try writer["PartNumber"].write(value.partNumber)
-    }
-}
-
-extension S3ClientTypes.CreateBucketConfiguration {
-
-    static func write(value: S3ClientTypes.CreateBucketConfiguration?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["Bucket"].write(value.bucket, with: S3ClientTypes.BucketInfo.write(value:to:))
-        try writer["Location"].write(value.location, with: S3ClientTypes.LocationInfo.write(value:to:))
-        try writer["LocationConstraint"].write(value.locationConstraint)
-        try writer["Tags"].writeList(value.tags, memberWritingClosure: S3ClientTypes.Tag.write(value:to:), memberNodeInfo: "Tag", isFlattened: false)
-    }
-}
-
-extension S3ClientTypes.BucketInfo {
-
-    static func write(value: S3ClientTypes.BucketInfo?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["DataRedundancy"].write(value.dataRedundancy)
-        try writer["Type"].write(value.type)
-    }
-}
-
-extension S3ClientTypes.LocationInfo {
-
-    static func write(value: S3ClientTypes.LocationInfo?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["Name"].write(value.name)
-        try writer["Type"].write(value.type)
-    }
-}
-
-extension S3ClientTypes.MetadataConfiguration {
-
-    static func write(value: S3ClientTypes.MetadataConfiguration?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["InventoryTableConfiguration"].write(value.inventoryTableConfiguration, with: S3ClientTypes.InventoryTableConfiguration.write(value:to:))
-        try writer["JournalTableConfiguration"].write(value.journalTableConfiguration, with: S3ClientTypes.JournalTableConfiguration.write(value:to:))
-    }
-}
-
-extension S3ClientTypes.InventoryTableConfiguration {
-
-    static func write(value: S3ClientTypes.InventoryTableConfiguration?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["ConfigurationState"].write(value.configurationState)
-        try writer["EncryptionConfiguration"].write(value.encryptionConfiguration, with: S3ClientTypes.MetadataTableEncryptionConfiguration.write(value:to:))
-    }
-}
-
-extension S3ClientTypes.MetadataTableEncryptionConfiguration {
-
-    static func write(value: S3ClientTypes.MetadataTableEncryptionConfiguration?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["KmsKeyArn"].write(value.kmsKeyArn)
-        try writer["SseAlgorithm"].write(value.sseAlgorithm)
-    }
-}
-
-extension S3ClientTypes.JournalTableConfiguration {
-
-    static func write(value: S3ClientTypes.JournalTableConfiguration?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["EncryptionConfiguration"].write(value.encryptionConfiguration, with: S3ClientTypes.MetadataTableEncryptionConfiguration.write(value:to:))
-        try writer["RecordExpiration"].write(value.recordExpiration, with: S3ClientTypes.RecordExpiration.write(value:to:))
-    }
-}
-
-extension S3ClientTypes.MetadataTableConfiguration {
-
-    static func write(value: S3ClientTypes.MetadataTableConfiguration?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["S3TablesDestination"].write(value.s3TablesDestination, with: S3ClientTypes.S3TablesDestination.write(value:to:))
-    }
-}
-
-extension S3ClientTypes.S3TablesDestination {
-
-    static func write(value: S3ClientTypes.S3TablesDestination?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["TableBucketArn"].write(value.tableBucketArn)
-        try writer["TableName"].write(value.tableName)
-    }
-}
-
-extension S3ClientTypes.Delete {
-
-    static func write(value: S3ClientTypes.Delete?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["Object"].writeList(value.objects, memberWritingClosure: S3ClientTypes.ObjectIdentifier.write(value:to:), memberNodeInfo: "member", isFlattened: true)
-        try writer["Quiet"].write(value.quiet)
-    }
-}
-
-extension S3ClientTypes.ObjectIdentifier {
-
-    static func write(value: S3ClientTypes.ObjectIdentifier?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["ETag"].write(value.eTag)
         try writer["Key"].write(value.key)
-        try writer["LastModifiedTime"].writeTimestamp(value.lastModifiedTime, format: SmithyTimestamps.TimestampFormat.httpDate)
-        try writer["Size"].write(value.size)
-        try writer["VersionId"].write(value.versionId)
+        try writer["Value"].write(value.value)
     }
-}
 
-extension S3ClientTypes.AccelerateConfiguration {
-
-    static func write(value: S3ClientTypes.AccelerateConfiguration?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["Status"].write(value.status)
-    }
-}
-
-extension S3ClientTypes.AccessControlPolicy {
-
-    static func write(value: S3ClientTypes.AccessControlPolicy?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["AccessControlList"].writeList(value.grants, memberWritingClosure: S3ClientTypes.Grant.write(value:to:), memberNodeInfo: "Grant", isFlattened: false)
-        try writer["Owner"].write(value.owner, with: S3ClientTypes.Owner.write(value:to:))
-    }
-}
-
-extension S3ClientTypes.CORSConfiguration {
-
-    static func write(value: S3ClientTypes.CORSConfiguration?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["CORSRule"].writeList(value.corsRules, memberWritingClosure: S3ClientTypes.CORSRule.write(value:to:), memberNodeInfo: "member", isFlattened: true)
-    }
-}
-
-extension S3ClientTypes.BucketLifecycleConfiguration {
-
-    static func write(value: S3ClientTypes.BucketLifecycleConfiguration?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["Rule"].writeList(value.rules, memberWritingClosure: S3ClientTypes.LifecycleRule.write(value:to:), memberNodeInfo: "member", isFlattened: true)
-    }
-}
-
-extension S3ClientTypes.BucketLoggingStatus {
-
-    static func write(value: S3ClientTypes.BucketLoggingStatus?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["LoggingEnabled"].write(value.loggingEnabled, with: S3ClientTypes.LoggingEnabled.write(value:to:))
-    }
-}
-
-extension S3ClientTypes.NotificationConfiguration {
-
-    static func write(value: S3ClientTypes.NotificationConfiguration?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["EventBridgeConfiguration"].write(value.eventBridgeConfiguration, with: S3ClientTypes.EventBridgeConfiguration.write(value:to:))
-        try writer["CloudFunctionConfiguration"].writeList(value.lambdaFunctionConfigurations, memberWritingClosure: S3ClientTypes.LambdaFunctionConfiguration.write(value:to:), memberNodeInfo: "member", isFlattened: true)
-        try writer["QueueConfiguration"].writeList(value.queueConfigurations, memberWritingClosure: S3ClientTypes.QueueConfiguration.write(value:to:), memberNodeInfo: "member", isFlattened: true)
-        try writer["TopicConfiguration"].writeList(value.topicConfigurations, memberWritingClosure: S3ClientTypes.TopicConfiguration.write(value:to:), memberNodeInfo: "member", isFlattened: true)
-    }
-}
-
-extension S3ClientTypes.RequestPaymentConfiguration {
-
-    static func write(value: S3ClientTypes.RequestPaymentConfiguration?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["Payer"].write(value.payer)
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.Tag {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.Tag()
+        value.key = try reader["Key"].readIfPresent() ?? ""
+        value.value = try reader["Value"].readIfPresent() ?? ""
+        return value
     }
 }
 
@@ -23879,6 +24177,97 @@ extension S3ClientTypes.Tagging {
     static func write(value: S3ClientTypes.Tagging?, to writer: SmithyXML.Writer) throws {
         guard let value else { return }
         try writer["TagSet"].writeList(value.tagSet, memberWritingClosure: S3ClientTypes.Tag.write(value:to:), memberNodeInfo: "Tag", isFlattened: false)
+    }
+}
+
+extension S3ClientTypes.TargetGrant {
+
+    static func write(value: S3ClientTypes.TargetGrant?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer[.init("Grantee", namespaceDef: .init(prefix: "xsi", uri: "http://www.w3.org/2001/XMLSchema-instance"))].write(value.grantee, with: S3ClientTypes.Grantee.write(value:to:))
+        try writer["Permission"].write(value.permission)
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.TargetGrant {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.TargetGrant()
+        value.grantee = try reader[.init("Grantee", namespaceDef: .init(prefix: "xsi", uri: "http://www.w3.org/2001/XMLSchema-instance"))].readIfPresent(with: S3ClientTypes.Grantee.read(from:))
+        value.permission = try reader["Permission"].readIfPresent()
+        return value
+    }
+}
+
+extension S3ClientTypes.TargetObjectKeyFormat {
+
+    static func write(value: S3ClientTypes.TargetObjectKeyFormat?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["PartitionedPrefix"].write(value.partitionedPrefix, with: S3ClientTypes.PartitionedPrefix.write(value:to:))
+        try writer["SimplePrefix"].write(value.simplePrefix, with: S3ClientTypes.SimplePrefix.write(value:to:))
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.TargetObjectKeyFormat {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.TargetObjectKeyFormat()
+        value.simplePrefix = try reader["SimplePrefix"].readIfPresent(with: S3ClientTypes.SimplePrefix.read(from:))
+        value.partitionedPrefix = try reader["PartitionedPrefix"].readIfPresent(with: S3ClientTypes.PartitionedPrefix.read(from:))
+        return value
+    }
+}
+
+extension S3ClientTypes.Tiering {
+
+    static func write(value: S3ClientTypes.Tiering?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["AccessTier"].write(value.accessTier)
+        try writer["Days"].write(value.days)
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.Tiering {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.Tiering()
+        value.days = try reader["Days"].readIfPresent() ?? 0
+        value.accessTier = try reader["AccessTier"].readIfPresent() ?? .sdkUnknown("")
+        return value
+    }
+}
+
+extension S3ClientTypes.TopicConfiguration {
+
+    static func write(value: S3ClientTypes.TopicConfiguration?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["Event"].writeList(value.events, memberWritingClosure: SmithyReadWrite.WritingClosureBox<S3ClientTypes.Event>().write(value:to:), memberNodeInfo: "member", isFlattened: true)
+        try writer["Filter"].write(value.filter, with: S3ClientTypes.NotificationConfigurationFilter.write(value:to:))
+        try writer["Id"].write(value.id)
+        try writer["Topic"].write(value.topicArn)
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.TopicConfiguration {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.TopicConfiguration()
+        value.id = try reader["Id"].readIfPresent()
+        value.topicArn = try reader["Topic"].readIfPresent() ?? ""
+        value.events = try reader["Event"].readListIfPresent(memberReadingClosure: SmithyReadWrite.ReadingClosureBox<S3ClientTypes.Event>().read(from:), memberNodeInfo: "member", isFlattened: true) ?? []
+        value.filter = try reader["Filter"].readIfPresent(with: S3ClientTypes.NotificationConfigurationFilter.read(from:))
+        return value
+    }
+}
+
+extension S3ClientTypes.Transition {
+
+    static func write(value: S3ClientTypes.Transition?, to writer: SmithyXML.Writer) throws {
+        guard let value else { return }
+        try writer["Date"].writeTimestamp(value.date, format: SmithyTimestamps.TimestampFormat.dateTime)
+        try writer["Days"].write(value.days)
+        try writer["StorageClass"].write(value.storageClass)
+    }
+
+    static func read(from reader: SmithyXML.Reader) throws -> S3ClientTypes.Transition {
+        guard reader.hasContent else { throw SmithyReadWrite.ReaderError.requiredValueNotPresent }
+        var value = S3ClientTypes.Transition()
+        value.date = try reader["Date"].readTimestampIfPresent(format: SmithyTimestamps.TimestampFormat.dateTime)
+        value.days = try reader["Days"].readIfPresent()
+        value.storageClass = try reader["StorageClass"].readIfPresent()
+        return value
     }
 }
 
@@ -23902,187 +24291,8 @@ extension S3ClientTypes.WebsiteConfiguration {
     }
 }
 
-extension S3ClientTypes.RestoreRequest {
-
-    static func write(value: S3ClientTypes.RestoreRequest?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["Days"].write(value.days)
-        try writer["Description"].write(value.description)
-        try writer["GlacierJobParameters"].write(value.glacierJobParameters, with: S3ClientTypes.GlacierJobParameters.write(value:to:))
-        try writer["OutputLocation"].write(value.outputLocation, with: S3ClientTypes.OutputLocation.write(value:to:))
-        try writer["SelectParameters"].write(value.selectParameters, with: S3ClientTypes.SelectParameters.write(value:to:))
-        try writer["Tier"].write(value.tier)
-        try writer["Type"].write(value.type)
-    }
-}
-
-extension S3ClientTypes.OutputLocation {
-
-    static func write(value: S3ClientTypes.OutputLocation?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["S3"].write(value.s3, with: S3ClientTypes.S3Location.write(value:to:))
-    }
-}
-
-extension S3ClientTypes.S3Location {
-
-    static func write(value: S3ClientTypes.S3Location?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["AccessControlList"].writeList(value.accessControlList, memberWritingClosure: S3ClientTypes.Grant.write(value:to:), memberNodeInfo: "Grant", isFlattened: false)
-        try writer["BucketName"].write(value.bucketName)
-        try writer["CannedACL"].write(value.cannedACL)
-        try writer["Encryption"].write(value.encryption, with: S3ClientTypes.Encryption.write(value:to:))
-        try writer["Prefix"].write(value.`prefix`)
-        try writer["StorageClass"].write(value.storageClass)
-        try writer["Tagging"].write(value.tagging, with: S3ClientTypes.Tagging.write(value:to:))
-        try writer["UserMetadata"].writeList(value.userMetadata, memberWritingClosure: S3ClientTypes.MetadataEntry.write(value:to:), memberNodeInfo: "MetadataEntry", isFlattened: false)
-    }
-}
-
-extension S3ClientTypes.MetadataEntry {
-
-    static func write(value: S3ClientTypes.MetadataEntry?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["Name"].write(value.name)
-        try writer["Value"].write(value.value)
-    }
-}
-
-extension S3ClientTypes.Encryption {
-
-    static func write(value: S3ClientTypes.Encryption?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["EncryptionType"].write(value.encryptionType)
-        try writer["KMSContext"].write(value.kmsContext)
-        try writer["KMSKeyId"].write(value.kmsKeyId)
-    }
-}
-
-extension S3ClientTypes.SelectParameters {
-
-    static func write(value: S3ClientTypes.SelectParameters?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["Expression"].write(value.expression)
-        try writer["ExpressionType"].write(value.expressionType)
-        try writer["InputSerialization"].write(value.inputSerialization, with: S3ClientTypes.InputSerialization.write(value:to:))
-        try writer["OutputSerialization"].write(value.outputSerialization, with: S3ClientTypes.OutputSerialization.write(value:to:))
-    }
-}
-
-extension S3ClientTypes.OutputSerialization {
-
-    static func write(value: S3ClientTypes.OutputSerialization?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["CSV"].write(value.csv, with: S3ClientTypes.CSVOutput.write(value:to:))
-        try writer["JSON"].write(value.json, with: S3ClientTypes.JSONOutput.write(value:to:))
-    }
-}
-
-extension S3ClientTypes.JSONOutput {
-
-    static func write(value: S3ClientTypes.JSONOutput?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["RecordDelimiter"].write(value.recordDelimiter)
-    }
-}
-
-extension S3ClientTypes.CSVOutput {
-
-    static func write(value: S3ClientTypes.CSVOutput?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["FieldDelimiter"].write(value.fieldDelimiter)
-        try writer["QuoteCharacter"].write(value.quoteCharacter)
-        try writer["QuoteEscapeCharacter"].write(value.quoteEscapeCharacter)
-        try writer["QuoteFields"].write(value.quoteFields)
-        try writer["RecordDelimiter"].write(value.recordDelimiter)
-    }
-}
-
-extension S3ClientTypes.InputSerialization {
-
-    static func write(value: S3ClientTypes.InputSerialization?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["CSV"].write(value.csv, with: S3ClientTypes.CSVInput.write(value:to:))
-        try writer["CompressionType"].write(value.compressionType)
-        try writer["JSON"].write(value.json, with: S3ClientTypes.JSONInput.write(value:to:))
-        try writer["Parquet"].write(value.parquet, with: S3ClientTypes.ParquetInput.write(value:to:))
-    }
-}
-
-extension S3ClientTypes.ParquetInput {
-
-    static func write(value: S3ClientTypes.ParquetInput?, to writer: SmithyXML.Writer) throws {
-        guard value != nil else { return }
-        _ = writer[""]  // create an empty structure
-    }
-}
-
-extension S3ClientTypes.JSONInput {
-
-    static func write(value: S3ClientTypes.JSONInput?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["Type"].write(value.type)
-    }
-}
-
-extension S3ClientTypes.CSVInput {
-
-    static func write(value: S3ClientTypes.CSVInput?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["AllowQuotedRecordDelimiter"].write(value.allowQuotedRecordDelimiter)
-        try writer["Comments"].write(value.comments)
-        try writer["FieldDelimiter"].write(value.fieldDelimiter)
-        try writer["FileHeaderInfo"].write(value.fileHeaderInfo)
-        try writer["QuoteCharacter"].write(value.quoteCharacter)
-        try writer["QuoteEscapeCharacter"].write(value.quoteEscapeCharacter)
-        try writer["RecordDelimiter"].write(value.recordDelimiter)
-    }
-}
-
-extension S3ClientTypes.GlacierJobParameters {
-
-    static func write(value: S3ClientTypes.GlacierJobParameters?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["Tier"].write(value.tier)
-    }
-}
-
-extension S3ClientTypes.RequestProgress {
-
-    static func write(value: S3ClientTypes.RequestProgress?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["Enabled"].write(value.enabled)
-    }
-}
-
-extension S3ClientTypes.ScanRange {
-
-    static func write(value: S3ClientTypes.ScanRange?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["End"].write(value.end)
-        try writer["Start"].write(value.start)
-    }
-}
-
-extension S3ClientTypes.InventoryTableConfigurationUpdates {
-
-    static func write(value: S3ClientTypes.InventoryTableConfigurationUpdates?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["ConfigurationState"].write(value.configurationState)
-        try writer["EncryptionConfiguration"].write(value.encryptionConfiguration, with: S3ClientTypes.MetadataTableEncryptionConfiguration.write(value:to:))
-    }
-}
-
-extension S3ClientTypes.JournalTableConfigurationUpdates {
-
-    static func write(value: S3ClientTypes.JournalTableConfigurationUpdates?, to writer: SmithyXML.Writer) throws {
-        guard let value else { return }
-        try writer["RecordExpiration"].write(value.recordExpiration, with: S3ClientTypes.RecordExpiration.write(value:to:))
-    }
-}
-
 extension GetObjectInput {
-    public func presignURL(config: S3Client.S3ClientConfiguration, expiration: Foundation.TimeInterval) async throws -> Foundation.URL? {
+    public func presignURL(config: S3Client.S3ClientConfig, expiration: Foundation.TimeInterval) async throws -> Foundation.URL? {
         let serviceName = "S3"
         let input = self
         let client: (SmithyHTTPAPI.HTTPRequest, Smithy.Context) async throws -> SmithyHTTPAPI.HTTPResponse = { (_, _) in
@@ -24103,7 +24313,7 @@ extension GetObjectInput {
                       .withResponseChecksumValidation(value: config.responseChecksumValidation)
                       .withSigningName(value: "s3")
                       .withSigningRegion(value: config.signingRegion)
-                      .withClientConfig(value: config)
+                      .withClientConfig(value: config as ClientRuntime.DefaultClientConfiguration)
                       .build()
         let builder = ClientRuntime.OrchestratorBuilder<GetObjectInput, GetObjectOutput, SmithyHTTPAPI.HTTPRequest, SmithyHTTPAPI.HTTPResponse>()
         config.interceptorProviders.forEach { provider in
@@ -24142,6 +24352,11 @@ extension GetObjectInput {
             .executeRequest(client)
             .build()
         return try await op.presignRequest(input: input).endpoint.url
+    }
+
+    @available(*, deprecated, message: "Use presignURL(config: S3Client.S3ClientConfig, expiration:) instead")
+    public func presignURL(config: S3Client.S3ClientConfiguration, expiration: Foundation.TimeInterval) async throws -> Foundation.URL? {
+        return try await self.presignURL(config: config.toSendable(), expiration: expiration)
     }
 }
 
@@ -24227,7 +24442,7 @@ extension GetObjectInputGETQueryItemMiddleware: Smithy.RequestMessageSerializer 
 }
 
 extension PutObjectInput {
-    public func presignURL(config: S3Client.S3ClientConfiguration, expiration: Foundation.TimeInterval) async throws -> Foundation.URL? {
+    public func presignURL(config: S3Client.S3ClientConfig, expiration: Foundation.TimeInterval) async throws -> Foundation.URL? {
         let serviceName = "S3"
         let input = self
         let client: (SmithyHTTPAPI.HTTPRequest, Smithy.Context) async throws -> SmithyHTTPAPI.HTTPResponse = { (_, _) in
@@ -24248,7 +24463,7 @@ extension PutObjectInput {
                       .withResponseChecksumValidation(value: config.responseChecksumValidation)
                       .withSigningName(value: "s3")
                       .withSigningRegion(value: config.signingRegion)
-                      .withClientConfig(value: config)
+                      .withClientConfig(value: config as ClientRuntime.DefaultClientConfiguration)
                       .build()
         let builder = ClientRuntime.OrchestratorBuilder<PutObjectInput, PutObjectOutput, SmithyHTTPAPI.HTTPRequest, SmithyHTTPAPI.HTTPResponse>()
         config.interceptorProviders.forEach { provider in
@@ -24289,6 +24504,11 @@ extension PutObjectInput {
             .build()
         return try await op.presignRequest(input: input).endpoint.url
     }
+
+    @available(*, deprecated, message: "Use presignURL(config: S3Client.S3ClientConfig, expiration:) instead")
+    public func presignURL(config: S3Client.S3ClientConfiguration, expiration: Foundation.TimeInterval) async throws -> Foundation.URL? {
+        return try await self.presignURL(config: config.toSendable(), expiration: expiration)
+    }
 }
 
 public struct PutObjectPresignedURLMiddleware {
@@ -24313,7 +24533,7 @@ extension PutObjectPresignedURLMiddleware: Smithy.RequestMessageSerializer {
 }
 
 extension UploadPartInput {
-    public func presignURL(config: S3Client.S3ClientConfiguration, expiration: Foundation.TimeInterval) async throws -> Foundation.URL? {
+    public func presignURL(config: S3Client.S3ClientConfig, expiration: Foundation.TimeInterval) async throws -> Foundation.URL? {
         let serviceName = "S3"
         let input = self
         let client: (SmithyHTTPAPI.HTTPRequest, Smithy.Context) async throws -> SmithyHTTPAPI.HTTPResponse = { (_, _) in
@@ -24334,7 +24554,7 @@ extension UploadPartInput {
                       .withResponseChecksumValidation(value: config.responseChecksumValidation)
                       .withSigningName(value: "s3")
                       .withSigningRegion(value: config.signingRegion)
-                      .withClientConfig(value: config)
+                      .withClientConfig(value: config as ClientRuntime.DefaultClientConfiguration)
                       .build()
         let builder = ClientRuntime.OrchestratorBuilder<UploadPartInput, UploadPartOutput, SmithyHTTPAPI.HTTPRequest, SmithyHTTPAPI.HTTPResponse>()
         config.interceptorProviders.forEach { provider in
@@ -24375,10 +24595,15 @@ extension UploadPartInput {
             .build()
         return try await op.presignRequest(input: input).endpoint.url
     }
+
+    @available(*, deprecated, message: "Use presignURL(config: S3Client.S3ClientConfig, expiration:) instead")
+    public func presignURL(config: S3Client.S3ClientConfiguration, expiration: Foundation.TimeInterval) async throws -> Foundation.URL? {
+        return try await self.presignURL(config: config.toSendable(), expiration: expiration)
+    }
 }
 
 extension GetObjectInput {
-    public func presign(config: S3Client.S3ClientConfiguration, expiration: Foundation.TimeInterval) async throws -> SmithyHTTPAPI.HTTPRequest? {
+    public func presign(config: S3Client.S3ClientConfig, expiration: Foundation.TimeInterval) async throws -> SmithyHTTPAPI.HTTPRequest? {
         let serviceName = "S3"
         let input = self
         let client: (SmithyHTTPAPI.HTTPRequest, Smithy.Context) async throws -> SmithyHTTPAPI.HTTPResponse = { (_, _) in
@@ -24399,7 +24624,7 @@ extension GetObjectInput {
                       .withResponseChecksumValidation(value: config.responseChecksumValidation)
                       .withSigningName(value: "s3")
                       .withSigningRegion(value: config.signingRegion)
-                      .withClientConfig(value: config)
+                      .withClientConfig(value: config as ClientRuntime.DefaultClientConfiguration)
                       .build()
         let builder = ClientRuntime.OrchestratorBuilder<GetObjectInput, GetObjectOutput, SmithyHTTPAPI.HTTPRequest, SmithyHTTPAPI.HTTPResponse>()
         config.interceptorProviders.forEach { provider in
@@ -24443,10 +24668,15 @@ extension GetObjectInput {
             .build()
         return try await op.presignRequest(input: input)
     }
+
+    @available(*, deprecated, message: "Use presign(config: S3Client.S3ClientConfig, expiration:) instead")
+    public func presign(config: S3Client.S3ClientConfiguration, expiration: Foundation.TimeInterval) async throws -> SmithyHTTPAPI.HTTPRequest? {
+        return try await self.presign(config: config.toSendable(), expiration: expiration)
+    }
 }
 
 extension PutObjectInput {
-    public func presign(config: S3Client.S3ClientConfiguration, expiration: Foundation.TimeInterval) async throws -> SmithyHTTPAPI.HTTPRequest? {
+    public func presign(config: S3Client.S3ClientConfig, expiration: Foundation.TimeInterval) async throws -> SmithyHTTPAPI.HTTPRequest? {
         let serviceName = "S3"
         let input = self
         let client: (SmithyHTTPAPI.HTTPRequest, Smithy.Context) async throws -> SmithyHTTPAPI.HTTPResponse = { (_, _) in
@@ -24467,7 +24697,7 @@ extension PutObjectInput {
                       .withResponseChecksumValidation(value: config.responseChecksumValidation)
                       .withSigningName(value: "s3")
                       .withSigningRegion(value: config.signingRegion)
-                      .withClientConfig(value: config)
+                      .withClientConfig(value: config as ClientRuntime.DefaultClientConfiguration)
                       .build()
         let builder = ClientRuntime.OrchestratorBuilder<PutObjectInput, PutObjectOutput, SmithyHTTPAPI.HTTPRequest, SmithyHTTPAPI.HTTPResponse>()
         config.interceptorProviders.forEach { provider in
@@ -24515,10 +24745,15 @@ extension PutObjectInput {
             .build()
         return try await op.presignRequest(input: input)
     }
+
+    @available(*, deprecated, message: "Use presign(config: S3Client.S3ClientConfig, expiration:) instead")
+    public func presign(config: S3Client.S3ClientConfiguration, expiration: Foundation.TimeInterval) async throws -> SmithyHTTPAPI.HTTPRequest? {
+        return try await self.presign(config: config.toSendable(), expiration: expiration)
+    }
 }
 
 extension UploadPartInput {
-    public func presign(config: S3Client.S3ClientConfiguration, expiration: Foundation.TimeInterval) async throws -> SmithyHTTPAPI.HTTPRequest? {
+    public func presign(config: S3Client.S3ClientConfig, expiration: Foundation.TimeInterval) async throws -> SmithyHTTPAPI.HTTPRequest? {
         let serviceName = "S3"
         let input = self
         let client: (SmithyHTTPAPI.HTTPRequest, Smithy.Context) async throws -> SmithyHTTPAPI.HTTPResponse = { (_, _) in
@@ -24539,7 +24774,7 @@ extension UploadPartInput {
                       .withResponseChecksumValidation(value: config.responseChecksumValidation)
                       .withSigningName(value: "s3")
                       .withSigningRegion(value: config.signingRegion)
-                      .withClientConfig(value: config)
+                      .withClientConfig(value: config as ClientRuntime.DefaultClientConfiguration)
                       .build()
         let builder = ClientRuntime.OrchestratorBuilder<UploadPartInput, UploadPartOutput, SmithyHTTPAPI.HTTPRequest, SmithyHTTPAPI.HTTPResponse>()
         config.interceptorProviders.forEach { provider in
@@ -24586,6 +24821,11 @@ extension UploadPartInput {
             .executeRequest(client)
             .build()
         return try await op.presignRequest(input: input)
+    }
+
+    @available(*, deprecated, message: "Use presign(config: S3Client.S3ClientConfig, expiration:) instead")
+    public func presign(config: S3Client.S3ClientConfiguration, expiration: Foundation.TimeInterval) async throws -> SmithyHTTPAPI.HTTPRequest? {
+        return try await self.presign(config: config.toSendable(), expiration: expiration)
     }
 }
 

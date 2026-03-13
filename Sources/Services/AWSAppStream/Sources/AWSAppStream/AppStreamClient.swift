@@ -30,6 +30,7 @@ import enum AWSSDKChecksums.AWSChecksumCalculationMode
 import enum ClientRuntime.ClientLogMode
 import enum ClientRuntime.DefaultTelemetry
 import enum ClientRuntime.OrchestratorMetricsAttributesKeys
+import func ClientRuntime.initialize
 import protocol AWSClientRuntime.AWSDefaultClientConfiguration
 import protocol AWSClientRuntime.AWSRegionClientConfiguration
 import protocol AWSClientRuntime.AWSServiceClient
@@ -48,7 +49,6 @@ import protocol SmithyIdentity.BearerTokenIdentityResolver
 @_spi(AWSEndpointResolverMiddleware) import struct AWSClientRuntime.AWSEndpointResolverMiddleware
 import struct AWSClientRuntime.AmzSdkInvocationIdMiddleware
 import struct AWSClientRuntime.UserAgentMiddleware
-import struct AWSClientRuntime.XAmzTargetMiddleware
 import struct AWSSDKHTTPAuth.SigV4AuthScheme
 import struct ClientRuntime.AuthSchemeMiddleware
 @_spi(SmithyReadWrite) import struct ClientRuntime.BodyMiddleware
@@ -56,6 +56,9 @@ import struct ClientRuntime.ContentLengthMiddleware
 import struct ClientRuntime.ContentTypeMiddleware
 @_spi(SmithyReadWrite) import struct ClientRuntime.DeserializeMiddleware
 import struct ClientRuntime.LoggerMiddleware
+import struct ClientRuntime.MutateHeadersMiddleware
+import struct ClientRuntime.SendableHttpInterceptorProviderBox
+import struct ClientRuntime.SendableInterceptorProviderBox
 import struct ClientRuntime.SignerMiddleware
 import struct ClientRuntime.URLHostMiddleware
 import struct ClientRuntime.URLPathMiddleware
@@ -66,31 +69,49 @@ import struct SmithyRetries.DefaultRetryStrategy
 import struct SmithyRetriesAPI.RetryStrategyOptions
 import typealias SmithyHTTPAuthAPI.AuthSchemes
 
-public class AppStreamClient: AWSClientRuntime.AWSServiceClient {
+public final class AppStreamClient: AWSClientRuntime.AWSServiceClient {
     public static let clientName = "AppStreamClient"
     let client: ClientRuntime.SdkHttpClient
-    let config: AppStreamClient.AppStreamClientConfiguration
+    public let config: AppStreamClient.AppStreamClientConfig
     let serviceName = "AppStream"
 
-    public required init(config: AppStreamClient.AppStreamClientConfiguration) {
+    @available(*, deprecated, message: "Use AppStreamClient.AppStreamClientConfig instead")
+    public typealias Config = AppStreamClient.AppStreamClientConfiguration
+    public typealias Configuration = AppStreamClient.AppStreamClientConfig
+
+    public required init(config: AppStreamClient.AppStreamClientConfig) {
+        ClientRuntime.initialize()
         client = ClientRuntime.SdkHttpClient(engine: config.httpClientEngine, config: config.httpClientConfiguration)
         self.config = config
     }
 
+    @available(*, deprecated, message: "Use init(config: AppStreamClient.AppStreamClientConfig) instead")
+    public convenience init(config: AppStreamClient.AppStreamClientConfiguration) {
+        do {
+            try self.init(config: config.toSendable())
+        } catch {
+            // This should never happen since all values are already initialized in the class
+            fatalError("Failed to convert deprecated configuration: \(error)")
+        }
+    }
+
     public convenience init(region: Swift.String) throws {
-        let config = try AppStreamClient.AppStreamClientConfiguration(region: region)
+        let config = try AppStreamClient.AppStreamClientConfig(region: region)
         self.init(config: config)
     }
 
-    public convenience required init() async throws {
-        let config = try await AppStreamClient.AppStreamClientConfiguration()
+    public convenience init() async throws {
+        let config = try await AppStreamClient.AppStreamClientConfig()
         self.init(config: config)
     }
 }
 
 extension AppStreamClient {
 
-    public class AppStreamClientConfiguration: AWSClientRuntime.AWSDefaultClientConfiguration & AWSClientRuntime.AWSRegionClientConfiguration & ClientRuntime.DefaultClientConfiguration & ClientRuntime.DefaultHttpClientConfiguration {
+    /// Client configuration for AppStreamClient
+    ///
+    /// Conforms to `Sendable` for safe concurrent access across threads.
+    public struct AppStreamClientConfig: AWSClientRuntime.AWSDefaultClientConfiguration & AWSClientRuntime.AWSRegionClientConfiguration & ClientRuntime.DefaultClientConfiguration & ClientRuntime.DefaultHttpClientConfiguration, Swift.Sendable {
         public var useFIPS: Swift.Bool?
         public var useDualStack: Swift.Bool?
         public var appID: Swift.String?
@@ -114,66 +135,29 @@ extension AppStreamClient {
         public var authSchemePreference: [String]?
         public var authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver
         public var bearerTokenIdentityResolver: any SmithyIdentity.BearerTokenIdentityResolver
-        public private(set) var interceptorProviders: [ClientRuntime.InterceptorProvider]
-        public private(set) var httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]
-        public let logger: Smithy.LogAgent
-
-        private init(
-            _ useFIPS: Swift.Bool?,
-            _ useDualStack: Swift.Bool?,
-            _ appID: Swift.String?,
-            _ awsCredentialIdentityResolver: any SmithyIdentity.AWSCredentialIdentityResolver,
-            _ awsRetryMode: AWSClientRuntime.AWSRetryMode,
-            _ maxAttempts: Swift.Int?,
-            _ requestChecksumCalculation: AWSSDKChecksums.AWSChecksumCalculationMode,
-            _ responseChecksumValidation: AWSSDKChecksums.AWSChecksumCalculationMode,
-            _ ignoreConfiguredEndpointURLs: Swift.Bool?,
-            _ region: Swift.String?,
-            _ signingRegion: Swift.String?,
-            _ endpointResolver: EndpointResolver,
-            _ telemetryProvider: ClientRuntime.TelemetryProvider,
-            _ retryStrategyOptions: SmithyRetriesAPI.RetryStrategyOptions,
-            _ clientLogMode: ClientRuntime.ClientLogMode,
-            _ endpoint: Swift.String?,
-            _ idempotencyTokenGenerator: ClientRuntime.IdempotencyTokenGenerator,
-            _ httpClientEngine: SmithyHTTPAPI.HTTPClient,
-            _ httpClientConfiguration: ClientRuntime.HttpClientConfiguration,
-            _ authSchemes: SmithyHTTPAuthAPI.AuthSchemes?,
-            _ authSchemePreference: [String]?,
-            _ authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver,
-            _ bearerTokenIdentityResolver: any SmithyIdentity.BearerTokenIdentityResolver,
-            _ interceptorProviders: [ClientRuntime.InterceptorProvider],
-            _ httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]
-        ) {
-            self.useFIPS = useFIPS
-            self.useDualStack = useDualStack
-            self.appID = appID
-            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver
-            self.awsRetryMode = awsRetryMode
-            self.maxAttempts = maxAttempts
-            self.requestChecksumCalculation = requestChecksumCalculation
-            self.responseChecksumValidation = responseChecksumValidation
-            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
-            self.region = region
-            self.signingRegion = signingRegion
-            self.endpointResolver = endpointResolver
-            self.telemetryProvider = telemetryProvider
-            self.retryStrategyOptions = retryStrategyOptions
-            self.clientLogMode = clientLogMode
-            self.endpoint = endpoint
-            self.idempotencyTokenGenerator = idempotencyTokenGenerator
-            self.httpClientEngine = httpClientEngine
-            self.httpClientConfiguration = httpClientConfiguration
-            self.authSchemes = authSchemes
-            self.authSchemePreference = authSchemePreference
-            self.authSchemeResolver = authSchemeResolver
-            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver
-            self.interceptorProviders = interceptorProviders
-            self.httpInterceptorProviders = httpInterceptorProviders
-            self.logger = telemetryProvider.loggerProvider.getLogger(name: AppStreamClient.clientName)
+        // Interceptor providers with Sendable-safe internal storage
+        private var _interceptorProviders: [ClientRuntime.SendableInterceptorProviderBox] = []
+        public var interceptorProviders: [ClientRuntime.InterceptorProvider] {
+            get {
+                return _interceptorProviders
+            }
+            set {
+                _interceptorProviders = newValue.map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            }
         }
 
-        public convenience init(
+        private var _httpInterceptorProviders: [ClientRuntime.SendableHttpInterceptorProviderBox] = []
+        public var httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider] {
+            get {
+                return _httpInterceptorProviders
+            }
+            set {
+                _httpInterceptorProviders = newValue.map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            }
+        }
+        public var logger: Smithy.LogAgent
+
+        public init(
             useFIPS: Swift.Bool? = nil,
             useDualStack: Swift.Bool? = nil,
             appID: Swift.String? = nil,
@@ -200,36 +184,35 @@ extension AppStreamClient {
             interceptorProviders: [ClientRuntime.InterceptorProvider]? = nil,
             httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]? = nil
         ) throws {
-            self.init(
-                useFIPS,
-                useDualStack,
-                try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
-                awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
-                try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
-                maxAttempts,
-                try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation),
-                try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation),
-                ignoreConfiguredEndpointURLs,
-                region,
-                signingRegion,
-                try endpointResolver ?? DefaultEndpointResolver(),
-                telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider,
-                try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts),
-                clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode(),
-                endpoint,
-                idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
-                httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration),
-                httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration(),
-                authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()],
-                authSchemePreference ?? nil,
-                authSchemeResolver ?? DefaultAppStreamAuthSchemeResolver(),
-                bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
-                interceptorProviders ?? [],
-                httpInterceptorProviders ?? []
-            )
+            self.useFIPS = useFIPS
+            self.useDualStack = useDualStack
+            self.appID = try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID()
+            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain()
+            self.awsRetryMode = try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode()
+            self.maxAttempts = maxAttempts
+            self.requestChecksumCalculation = try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation)
+            self.responseChecksumValidation = try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation)
+            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
+            self.region = region
+            self.signingRegion = signingRegion
+            self.endpointResolver = try endpointResolver ?? DefaultEndpointResolver()
+            self.telemetryProvider = telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider
+            self.retryStrategyOptions = try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts)
+            self.clientLogMode = clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode()
+            self.endpoint = endpoint
+            self.idempotencyTokenGenerator = idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator()
+            self.httpClientEngine = httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration)
+            self.httpClientConfiguration = httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration()
+            self.authSchemes = authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()]
+            self.authSchemePreference = authSchemePreference ?? nil
+            self.authSchemeResolver = authSchemeResolver ?? DefaultAppStreamAuthSchemeResolver()
+            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: ""))
+            self._interceptorProviders = (interceptorProviders ?? []).map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            self._httpInterceptorProviders = (httpInterceptorProviders ?? []).map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            self.logger = (telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider).loggerProvider.getLogger(name: AppStreamClient.clientName)
         }
 
-        public convenience init(
+        public init(
             useFIPS: Swift.Bool? = nil,
             useDualStack: Swift.Bool? = nil,
             appID: Swift.String? = nil,
@@ -256,36 +239,266 @@ extension AppStreamClient {
             interceptorProviders: [ClientRuntime.InterceptorProvider]? = nil,
             httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]? = nil
         ) async throws {
-            self.init(
-                useFIPS,
-                useDualStack,
-                try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
-                awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
-                try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
-                maxAttempts,
-                try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation),
-                try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation),
-                ignoreConfiguredEndpointURLs,
-                try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region),
-                try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region),
-                try endpointResolver ?? DefaultEndpointResolver(),
-                telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider,
-                try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts),
-                clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode(),
-                endpoint,
-                idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
-                httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration),
-                httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration(),
-                authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()],
-                authSchemePreference ?? nil,
-                authSchemeResolver ?? DefaultAppStreamAuthSchemeResolver(),
-                bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
-                interceptorProviders ?? [],
-                httpInterceptorProviders ?? []
+            self.useFIPS = useFIPS
+            self.useDualStack = useDualStack
+            self.appID = try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID()
+            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain()
+            self.awsRetryMode = try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode()
+            self.maxAttempts = maxAttempts
+            self.requestChecksumCalculation = try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation)
+            self.responseChecksumValidation = try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation)
+            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
+            self.region = try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region)
+            self.signingRegion = try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region)
+            self.endpointResolver = try endpointResolver ?? DefaultEndpointResolver()
+            self.telemetryProvider = telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider
+            self.retryStrategyOptions = try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts)
+            self.clientLogMode = clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode()
+            self.endpoint = endpoint
+            self.idempotencyTokenGenerator = idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator()
+            self.httpClientEngine = httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration)
+            self.httpClientConfiguration = httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration()
+            self.authSchemes = authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()]
+            self.authSchemePreference = authSchemePreference ?? nil
+            self.authSchemeResolver = authSchemeResolver ?? DefaultAppStreamAuthSchemeResolver()
+            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: ""))
+            self._interceptorProviders = (interceptorProviders ?? []).map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            self._httpInterceptorProviders = (httpInterceptorProviders ?? []).map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            self.logger = (telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider).loggerProvider.getLogger(name: AppStreamClient.clientName)
+        }
+
+        public init() async throws {
+            try await self.init(
+                useFIPS: nil,
+                useDualStack: nil,
+                appID: nil,
+                awsCredentialIdentityResolver: nil,
+                awsRetryMode: nil,
+                maxAttempts: nil,
+                requestChecksumCalculation: nil,
+                responseChecksumValidation: nil,
+                ignoreConfiguredEndpointURLs: nil,
+                region: nil,
+                signingRegion: nil,
+                endpointResolver: nil,
+                telemetryProvider: nil,
+                retryStrategyOptions: nil,
+                clientLogMode: nil,
+                endpoint: nil,
+                idempotencyTokenGenerator: nil,
+                httpClientEngine: nil,
+                httpClientConfiguration: nil,
+                authSchemes: nil,
+                authSchemePreference: nil,
+                authSchemeResolver: nil,
+                bearerTokenIdentityResolver: nil,
+                interceptorProviders: nil,
+                httpInterceptorProviders: nil
             )
         }
 
-        public convenience required init() async throws {
+        public init(region: Swift.String) throws {
+            try self.init(
+                useFIPS: nil,
+                useDualStack: nil,
+                appID: try AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
+                awsCredentialIdentityResolver: AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
+                awsRetryMode: try AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
+                maxAttempts: nil,
+                requestChecksumCalculation: try AWSClientConfigDefaultsProvider.requestChecksumCalculation(),
+                responseChecksumValidation: try AWSClientConfigDefaultsProvider.responseChecksumValidation(),
+                ignoreConfiguredEndpointURLs: nil,
+                region: region,
+                signingRegion: region,
+                endpointResolver: try DefaultEndpointResolver(),
+                telemetryProvider: ClientRuntime.DefaultTelemetry.provider,
+                retryStrategyOptions: try AWSClientConfigDefaultsProvider.retryStrategyOptions(),
+                clientLogMode: AWSClientConfigDefaultsProvider.clientLogMode(),
+                endpoint: nil,
+                idempotencyTokenGenerator: AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
+                httpClientEngine: AWSClientConfigDefaultsProvider.httpClientEngine(),
+                httpClientConfiguration: AWSClientConfigDefaultsProvider.httpClientConfiguration(),
+                authSchemes: [AWSSDKHTTPAuth.SigV4AuthScheme()],
+                authSchemePreference: nil,
+                authSchemeResolver: DefaultAppStreamAuthSchemeResolver(),
+                bearerTokenIdentityResolver: SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
+                interceptorProviders: [],
+                httpInterceptorProviders: []
+            )
+        }
+
+        public var partitionID: String? {
+            return "\(AppStreamClient.clientName) - \(region ?? "")"
+        }
+
+        public mutating func addInterceptorProvider(_ provider: ClientRuntime.InterceptorProvider) {
+            self._interceptorProviders.append(ClientRuntime.SendableInterceptorProviderBox(provider))
+        }
+
+        public mutating func addInterceptorProvider(_ provider: ClientRuntime.HttpInterceptorProvider) {
+            self._httpInterceptorProviders.append(ClientRuntime.SendableHttpInterceptorProviderBox(provider))
+        }
+
+    }
+
+    @available(*, deprecated, message: "Use AppStreamClientConfig instead. This class will be removed in a future version.")
+    public final class AppStreamClientConfiguration: AWSClientRuntime.AWSDefaultClientConfiguration & AWSClientRuntime.AWSRegionClientConfiguration & ClientRuntime.DefaultClientConfiguration & ClientRuntime.DefaultHttpClientConfiguration {
+        public var useFIPS: Swift.Bool?
+        public var useDualStack: Swift.Bool?
+        public var appID: Swift.String?
+        public var awsCredentialIdentityResolver: any SmithyIdentity.AWSCredentialIdentityResolver
+        public var awsRetryMode: AWSClientRuntime.AWSRetryMode
+        public var maxAttempts: Swift.Int?
+        public var requestChecksumCalculation: AWSSDKChecksums.AWSChecksumCalculationMode
+        public var responseChecksumValidation: AWSSDKChecksums.AWSChecksumCalculationMode
+        public var ignoreConfiguredEndpointURLs: Swift.Bool?
+        public var region: Swift.String?
+        public var signingRegion: Swift.String?
+        public var endpointResolver: EndpointResolver
+        public var telemetryProvider: ClientRuntime.TelemetryProvider
+        public var retryStrategyOptions: SmithyRetriesAPI.RetryStrategyOptions
+        public var clientLogMode: ClientRuntime.ClientLogMode
+        public var endpoint: Swift.String?
+        public var idempotencyTokenGenerator: ClientRuntime.IdempotencyTokenGenerator
+        public var httpClientEngine: SmithyHTTPAPI.HTTPClient
+        public var httpClientConfiguration: ClientRuntime.HttpClientConfiguration
+        public var authSchemes: SmithyHTTPAuthAPI.AuthSchemes?
+        public var authSchemePreference: [String]?
+        public var authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver
+        public var bearerTokenIdentityResolver: any SmithyIdentity.BearerTokenIdentityResolver
+        // Interceptor providers with Sendable-safe internal storage
+        private var _interceptorProviders: [ClientRuntime.SendableInterceptorProviderBox] = []
+        public var interceptorProviders: [ClientRuntime.InterceptorProvider] {
+            get {
+                return _interceptorProviders
+            }
+            set {
+                _interceptorProviders = newValue.map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            }
+        }
+
+        private var _httpInterceptorProviders: [ClientRuntime.SendableHttpInterceptorProviderBox] = []
+        public var httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider] {
+            get {
+                return _httpInterceptorProviders
+            }
+            set {
+                _httpInterceptorProviders = newValue.map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            }
+        }
+        public var logger: Smithy.LogAgent
+
+        public init(
+            useFIPS: Swift.Bool? = nil,
+            useDualStack: Swift.Bool? = nil,
+            appID: Swift.String? = nil,
+            awsCredentialIdentityResolver: (any SmithyIdentity.AWSCredentialIdentityResolver)? = nil,
+            awsRetryMode: AWSClientRuntime.AWSRetryMode? = nil,
+            maxAttempts: Swift.Int? = nil,
+            requestChecksumCalculation: AWSSDKChecksums.AWSChecksumCalculationMode? = nil,
+            responseChecksumValidation: AWSSDKChecksums.AWSChecksumCalculationMode? = nil,
+            ignoreConfiguredEndpointURLs: Swift.Bool? = nil,
+            region: Swift.String? = nil,
+            signingRegion: Swift.String? = nil,
+            endpointResolver: EndpointResolver? = nil,
+            telemetryProvider: ClientRuntime.TelemetryProvider? = nil,
+            retryStrategyOptions: SmithyRetriesAPI.RetryStrategyOptions? = nil,
+            clientLogMode: ClientRuntime.ClientLogMode? = nil,
+            endpoint: Swift.String? = nil,
+            idempotencyTokenGenerator: ClientRuntime.IdempotencyTokenGenerator? = nil,
+            httpClientEngine: SmithyHTTPAPI.HTTPClient? = nil,
+            httpClientConfiguration: ClientRuntime.HttpClientConfiguration? = nil,
+            authSchemes: SmithyHTTPAuthAPI.AuthSchemes? = nil,
+            authSchemePreference: [String]? = nil,
+            authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver? = nil,
+            bearerTokenIdentityResolver: (any SmithyIdentity.BearerTokenIdentityResolver)? = nil,
+            interceptorProviders: [ClientRuntime.InterceptorProvider]? = nil,
+            httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]? = nil
+        ) throws {
+            self.useFIPS = useFIPS
+            self.useDualStack = useDualStack
+            self.appID = try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID()
+            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain()
+            self.awsRetryMode = try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode()
+            self.maxAttempts = maxAttempts
+            self.requestChecksumCalculation = try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation)
+            self.responseChecksumValidation = try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation)
+            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
+            self.region = region
+            self.signingRegion = signingRegion
+            self.endpointResolver = try endpointResolver ?? DefaultEndpointResolver()
+            self.telemetryProvider = telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider
+            self.retryStrategyOptions = try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts)
+            self.clientLogMode = clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode()
+            self.endpoint = endpoint
+            self.idempotencyTokenGenerator = idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator()
+            self.httpClientEngine = httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration)
+            self.httpClientConfiguration = httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration()
+            self.authSchemes = authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()]
+            self.authSchemePreference = authSchemePreference ?? nil
+            self.authSchemeResolver = authSchemeResolver ?? DefaultAppStreamAuthSchemeResolver()
+            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: ""))
+            self._interceptorProviders = (interceptorProviders ?? []).map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            self._httpInterceptorProviders = (httpInterceptorProviders ?? []).map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            self.logger = (telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider).loggerProvider.getLogger(name: AppStreamClient.clientName)
+        }
+
+        public init(
+            useFIPS: Swift.Bool? = nil,
+            useDualStack: Swift.Bool? = nil,
+            appID: Swift.String? = nil,
+            awsCredentialIdentityResolver: (any SmithyIdentity.AWSCredentialIdentityResolver)? = nil,
+            awsRetryMode: AWSClientRuntime.AWSRetryMode? = nil,
+            maxAttempts: Swift.Int? = nil,
+            requestChecksumCalculation: AWSSDKChecksums.AWSChecksumCalculationMode? = nil,
+            responseChecksumValidation: AWSSDKChecksums.AWSChecksumCalculationMode? = nil,
+            ignoreConfiguredEndpointURLs: Swift.Bool? = nil,
+            region: Swift.String? = nil,
+            signingRegion: Swift.String? = nil,
+            endpointResolver: EndpointResolver? = nil,
+            telemetryProvider: ClientRuntime.TelemetryProvider? = nil,
+            retryStrategyOptions: SmithyRetriesAPI.RetryStrategyOptions? = nil,
+            clientLogMode: ClientRuntime.ClientLogMode? = nil,
+            endpoint: Swift.String? = nil,
+            idempotencyTokenGenerator: ClientRuntime.IdempotencyTokenGenerator? = nil,
+            httpClientEngine: SmithyHTTPAPI.HTTPClient? = nil,
+            httpClientConfiguration: ClientRuntime.HttpClientConfiguration? = nil,
+            authSchemes: SmithyHTTPAuthAPI.AuthSchemes? = nil,
+            authSchemePreference: [String]? = nil,
+            authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver? = nil,
+            bearerTokenIdentityResolver: (any SmithyIdentity.BearerTokenIdentityResolver)? = nil,
+            interceptorProviders: [ClientRuntime.InterceptorProvider]? = nil,
+            httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]? = nil
+        ) async throws {
+            self.useFIPS = useFIPS
+            self.useDualStack = useDualStack
+            self.appID = try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID()
+            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain()
+            self.awsRetryMode = try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode()
+            self.maxAttempts = maxAttempts
+            self.requestChecksumCalculation = try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation)
+            self.responseChecksumValidation = try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation)
+            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
+            self.region = try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region)
+            self.signingRegion = try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region)
+            self.endpointResolver = try endpointResolver ?? DefaultEndpointResolver()
+            self.telemetryProvider = telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider
+            self.retryStrategyOptions = try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts)
+            self.clientLogMode = clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode()
+            self.endpoint = endpoint
+            self.idempotencyTokenGenerator = idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator()
+            self.httpClientEngine = httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration)
+            self.httpClientConfiguration = httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration()
+            self.authSchemes = authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()]
+            self.authSchemePreference = authSchemePreference ?? nil
+            self.authSchemeResolver = authSchemeResolver ?? DefaultAppStreamAuthSchemeResolver()
+            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: ""))
+            self._interceptorProviders = (interceptorProviders ?? []).map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            self._httpInterceptorProviders = (httpInterceptorProviders ?? []).map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            self.logger = (telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider).loggerProvider.getLogger(name: AppStreamClient.clientName)
+        }
+
+        public convenience init() async throws {
             try await self.init(
                 useFIPS: nil,
                 useDualStack: nil,
@@ -316,32 +529,32 @@ extension AppStreamClient {
         }
 
         public convenience init(region: Swift.String) throws {
-            self.init(
-                nil,
-                nil,
-                try AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
-                AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
-                try AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
-                nil,
-                try AWSClientConfigDefaultsProvider.requestChecksumCalculation(),
-                try AWSClientConfigDefaultsProvider.responseChecksumValidation(),
-                nil,
-                region,
-                region,
-                try DefaultEndpointResolver(),
-                ClientRuntime.DefaultTelemetry.provider,
-                try AWSClientConfigDefaultsProvider.retryStrategyOptions(),
-                AWSClientConfigDefaultsProvider.clientLogMode(),
-                nil,
-                AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
-                AWSClientConfigDefaultsProvider.httpClientEngine(),
-                AWSClientConfigDefaultsProvider.httpClientConfiguration(),
-                [AWSSDKHTTPAuth.SigV4AuthScheme()],
-                nil,
-                DefaultAppStreamAuthSchemeResolver(),
-                SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
-                [],
-                []
+            try self.init(
+                useFIPS: nil,
+                useDualStack: nil,
+                appID: try AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
+                awsCredentialIdentityResolver: AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
+                awsRetryMode: try AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
+                maxAttempts: nil,
+                requestChecksumCalculation: try AWSClientConfigDefaultsProvider.requestChecksumCalculation(),
+                responseChecksumValidation: try AWSClientConfigDefaultsProvider.responseChecksumValidation(),
+                ignoreConfiguredEndpointURLs: nil,
+                region: region,
+                signingRegion: region,
+                endpointResolver: try DefaultEndpointResolver(),
+                telemetryProvider: ClientRuntime.DefaultTelemetry.provider,
+                retryStrategyOptions: try AWSClientConfigDefaultsProvider.retryStrategyOptions(),
+                clientLogMode: AWSClientConfigDefaultsProvider.clientLogMode(),
+                endpoint: nil,
+                idempotencyTokenGenerator: AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
+                httpClientEngine: AWSClientConfigDefaultsProvider.httpClientEngine(),
+                httpClientConfiguration: AWSClientConfigDefaultsProvider.httpClientConfiguration(),
+                authSchemes: [AWSSDKHTTPAuth.SigV4AuthScheme()],
+                authSchemePreference: nil,
+                authSchemeResolver: DefaultAppStreamAuthSchemeResolver(),
+                bearerTokenIdentityResolver: SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
+                interceptorProviders: [],
+                httpInterceptorProviders: []
             )
         }
 
@@ -349,12 +562,42 @@ extension AppStreamClient {
             return "\(AppStreamClient.clientName) - \(region ?? "")"
         }
 
+        public func toSendable() throws -> AppStreamClientConfig {
+            return try AppStreamClientConfig(
+                useFIPS: self.useFIPS,
+                useDualStack: self.useDualStack,
+                appID: self.appID,
+                awsCredentialIdentityResolver: self.awsCredentialIdentityResolver,
+                awsRetryMode: self.awsRetryMode,
+                maxAttempts: self.maxAttempts,
+                requestChecksumCalculation: self.requestChecksumCalculation,
+                responseChecksumValidation: self.responseChecksumValidation,
+                ignoreConfiguredEndpointURLs: self.ignoreConfiguredEndpointURLs,
+                region: self.region,
+                signingRegion: self.signingRegion,
+                endpointResolver: self.endpointResolver,
+                telemetryProvider: self.telemetryProvider,
+                retryStrategyOptions: self.retryStrategyOptions,
+                clientLogMode: self.clientLogMode,
+                endpoint: self.endpoint,
+                idempotencyTokenGenerator: self.idempotencyTokenGenerator,
+                httpClientEngine: self.httpClientEngine,
+                httpClientConfiguration: self.httpClientConfiguration,
+                authSchemes: self.authSchemes,
+                authSchemePreference: self.authSchemePreference,
+                authSchemeResolver: self.authSchemeResolver,
+                bearerTokenIdentityResolver: self.bearerTokenIdentityResolver,
+                interceptorProviders: self.interceptorProviders,
+                httpInterceptorProviders: self.httpInterceptorProviders
+            )
+        }
+
         public func addInterceptorProvider(_ provider: ClientRuntime.InterceptorProvider) {
-            self.interceptorProviders.append(provider)
+            self._interceptorProviders.append(ClientRuntime.SendableInterceptorProviderBox(provider))
         }
 
         public func addInterceptorProvider(_ provider: ClientRuntime.HttpInterceptorProvider) {
-            self.httpInterceptorProviders.append(provider)
+            self._httpInterceptorProviders.append(ClientRuntime.SendableHttpInterceptorProviderBox(provider))
         }
 
     }
@@ -420,7 +663,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<AssociateAppBlockBuilderAppBlockOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<AssociateAppBlockBuilderAppBlockInput, AssociateAppBlockBuilderAppBlockOutput>(xAmzTarget: "PhotonAdminProxyService.AssociateAppBlockBuilderAppBlock"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<AssociateAppBlockBuilderAppBlockInput, AssociateAppBlockBuilderAppBlockOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.AssociateAppBlockBuilderAppBlock"]))
         builder.serialize(ClientRuntime.BodyMiddleware<AssociateAppBlockBuilderAppBlockInput, AssociateAppBlockBuilderAppBlockOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: AssociateAppBlockBuilderAppBlockInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<AssociateAppBlockBuilderAppBlockInput, AssociateAppBlockBuilderAppBlockOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<AssociateAppBlockBuilderAppBlockOutput>())
@@ -493,7 +736,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<AssociateApplicationFleetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<AssociateApplicationFleetInput, AssociateApplicationFleetOutput>(xAmzTarget: "PhotonAdminProxyService.AssociateApplicationFleet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<AssociateApplicationFleetInput, AssociateApplicationFleetOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.AssociateApplicationFleet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<AssociateApplicationFleetInput, AssociateApplicationFleetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: AssociateApplicationFleetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<AssociateApplicationFleetInput, AssociateApplicationFleetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<AssociateApplicationFleetOutput>())
@@ -565,7 +808,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<AssociateApplicationToEntitlementOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<AssociateApplicationToEntitlementInput, AssociateApplicationToEntitlementOutput>(xAmzTarget: "PhotonAdminProxyService.AssociateApplicationToEntitlement"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<AssociateApplicationToEntitlementInput, AssociateApplicationToEntitlementOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.AssociateApplicationToEntitlement"]))
         builder.serialize(ClientRuntime.BodyMiddleware<AssociateApplicationToEntitlementInput, AssociateApplicationToEntitlementOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: AssociateApplicationToEntitlementInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<AssociateApplicationToEntitlementInput, AssociateApplicationToEntitlementOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<AssociateApplicationToEntitlementOutput>())
@@ -639,7 +882,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<AssociateFleetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<AssociateFleetInput, AssociateFleetOutput>(xAmzTarget: "PhotonAdminProxyService.AssociateFleet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<AssociateFleetInput, AssociateFleetOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.AssociateFleet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<AssociateFleetInput, AssociateFleetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: AssociateFleetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<AssociateFleetInput, AssociateFleetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<AssociateFleetOutput>())
@@ -712,7 +955,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<AssociateSoftwareToImageBuilderOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<AssociateSoftwareToImageBuilderInput, AssociateSoftwareToImageBuilderOutput>(xAmzTarget: "PhotonAdminProxyService.AssociateSoftwareToImageBuilder"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<AssociateSoftwareToImageBuilderInput, AssociateSoftwareToImageBuilderOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.AssociateSoftwareToImageBuilder"]))
         builder.serialize(ClientRuntime.BodyMiddleware<AssociateSoftwareToImageBuilderInput, AssociateSoftwareToImageBuilderOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: AssociateSoftwareToImageBuilderInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<AssociateSoftwareToImageBuilderInput, AssociateSoftwareToImageBuilderOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<AssociateSoftwareToImageBuilderOutput>())
@@ -782,7 +1025,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<BatchAssociateUserStackOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<BatchAssociateUserStackInput, BatchAssociateUserStackOutput>(xAmzTarget: "PhotonAdminProxyService.BatchAssociateUserStack"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<BatchAssociateUserStackInput, BatchAssociateUserStackOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.BatchAssociateUserStack"]))
         builder.serialize(ClientRuntime.BodyMiddleware<BatchAssociateUserStackInput, BatchAssociateUserStackOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: BatchAssociateUserStackInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<BatchAssociateUserStackInput, BatchAssociateUserStackOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<BatchAssociateUserStackOutput>())
@@ -852,7 +1095,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<BatchDisassociateUserStackOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<BatchDisassociateUserStackInput, BatchDisassociateUserStackOutput>(xAmzTarget: "PhotonAdminProxyService.BatchDisassociateUserStack"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<BatchDisassociateUserStackInput, BatchDisassociateUserStackOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.BatchDisassociateUserStack"]))
         builder.serialize(ClientRuntime.BodyMiddleware<BatchDisassociateUserStackInput, BatchDisassociateUserStackOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: BatchDisassociateUserStackInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<BatchDisassociateUserStackInput, BatchDisassociateUserStackOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<BatchDisassociateUserStackOutput>())
@@ -926,7 +1169,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CopyImageOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CopyImageInput, CopyImageOutput>(xAmzTarget: "PhotonAdminProxyService.CopyImage"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CopyImageInput, CopyImageOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.CopyImage"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CopyImageInput, CopyImageOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CopyImageInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CopyImageInput, CopyImageOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CopyImageOutput>())
@@ -998,7 +1241,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateAppBlockOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateAppBlockInput, CreateAppBlockOutput>(xAmzTarget: "PhotonAdminProxyService.CreateAppBlock"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateAppBlockInput, CreateAppBlockOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.CreateAppBlock"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateAppBlockInput, CreateAppBlockOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateAppBlockInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateAppBlockInput, CreateAppBlockOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateAppBlockOutput>())
@@ -1076,7 +1319,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateAppBlockBuilderOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateAppBlockBuilderInput, CreateAppBlockBuilderOutput>(xAmzTarget: "PhotonAdminProxyService.CreateAppBlockBuilder"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateAppBlockBuilderInput, CreateAppBlockBuilderOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.CreateAppBlockBuilder"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateAppBlockBuilderInput, CreateAppBlockBuilderOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateAppBlockBuilderInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateAppBlockBuilderInput, CreateAppBlockBuilderOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateAppBlockBuilderOutput>())
@@ -1146,7 +1389,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateAppBlockBuilderStreamingURLOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateAppBlockBuilderStreamingURLInput, CreateAppBlockBuilderStreamingURLOutput>(xAmzTarget: "PhotonAdminProxyService.CreateAppBlockBuilderStreamingURL"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateAppBlockBuilderStreamingURLInput, CreateAppBlockBuilderStreamingURLOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.CreateAppBlockBuilderStreamingURL"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateAppBlockBuilderStreamingURLInput, CreateAppBlockBuilderStreamingURLOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateAppBlockBuilderStreamingURLInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateAppBlockBuilderStreamingURLInput, CreateAppBlockBuilderStreamingURLOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateAppBlockBuilderStreamingURLOutput>())
@@ -1219,7 +1462,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateApplicationOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateApplicationInput, CreateApplicationOutput>(xAmzTarget: "PhotonAdminProxyService.CreateApplication"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateApplicationInput, CreateApplicationOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.CreateApplication"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateApplicationInput, CreateApplicationOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateApplicationInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateApplicationInput, CreateApplicationOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateApplicationOutput>())
@@ -1293,7 +1536,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateDirectoryConfigOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateDirectoryConfigInput, CreateDirectoryConfigOutput>(xAmzTarget: "PhotonAdminProxyService.CreateDirectoryConfig"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateDirectoryConfigInput, CreateDirectoryConfigOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.CreateDirectoryConfig"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateDirectoryConfigInput, CreateDirectoryConfigOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateDirectoryConfigInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateDirectoryConfigInput, CreateDirectoryConfigOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateDirectoryConfigOutput>())
@@ -1365,7 +1608,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateEntitlementOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateEntitlementInput, CreateEntitlementOutput>(xAmzTarget: "PhotonAdminProxyService.CreateEntitlement"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateEntitlementInput, CreateEntitlementOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.CreateEntitlement"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateEntitlementInput, CreateEntitlementOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateEntitlementInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateEntitlementInput, CreateEntitlementOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateEntitlementOutput>())
@@ -1440,7 +1683,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateExportImageTaskOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateExportImageTaskInput, CreateExportImageTaskOutput>(xAmzTarget: "PhotonAdminProxyService.CreateExportImageTask"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateExportImageTaskInput, CreateExportImageTaskOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.CreateExportImageTask"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateExportImageTaskInput, CreateExportImageTaskOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateExportImageTaskInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateExportImageTaskInput, CreateExportImageTaskOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateExportImageTaskOutput>())
@@ -1519,7 +1762,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateFleetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateFleetInput, CreateFleetOutput>(xAmzTarget: "PhotonAdminProxyService.CreateFleet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateFleetInput, CreateFleetOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.CreateFleet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateFleetInput, CreateFleetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateFleetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateFleetInput, CreateFleetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateFleetOutput>())
@@ -1598,7 +1841,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateImageBuilderOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateImageBuilderInput, CreateImageBuilderOutput>(xAmzTarget: "PhotonAdminProxyService.CreateImageBuilder"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateImageBuilderInput, CreateImageBuilderOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.CreateImageBuilder"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateImageBuilderInput, CreateImageBuilderOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateImageBuilderInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateImageBuilderInput, CreateImageBuilderOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateImageBuilderOutput>())
@@ -1668,7 +1911,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateImageBuilderStreamingURLOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateImageBuilderStreamingURLInput, CreateImageBuilderStreamingURLOutput>(xAmzTarget: "PhotonAdminProxyService.CreateImageBuilderStreamingURL"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateImageBuilderStreamingURLInput, CreateImageBuilderStreamingURLOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.CreateImageBuilderStreamingURL"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateImageBuilderStreamingURLInput, CreateImageBuilderStreamingURLOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateImageBuilderStreamingURLInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateImageBuilderStreamingURLInput, CreateImageBuilderStreamingURLOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateImageBuilderStreamingURLOutput>())
@@ -1744,7 +1987,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateImportedImageOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateImportedImageInput, CreateImportedImageOutput>(xAmzTarget: "PhotonAdminProxyService.CreateImportedImage"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateImportedImageInput, CreateImportedImageOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.CreateImportedImage"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateImportedImageInput, CreateImportedImageOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateImportedImageInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateImportedImageInput, CreateImportedImageOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateImportedImageOutput>())
@@ -1820,7 +2063,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateStackOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateStackInput, CreateStackOutput>(xAmzTarget: "PhotonAdminProxyService.CreateStack"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateStackInput, CreateStackOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.CreateStack"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateStackInput, CreateStackOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateStackInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateStackInput, CreateStackOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateStackOutput>())
@@ -1892,7 +2135,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateStreamingURLOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateStreamingURLInput, CreateStreamingURLOutput>(xAmzTarget: "PhotonAdminProxyService.CreateStreamingURL"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateStreamingURLInput, CreateStreamingURLOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.CreateStreamingURL"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateStreamingURLInput, CreateStreamingURLOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateStreamingURLInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateStreamingURLInput, CreateStreamingURLOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateStreamingURLOutput>())
@@ -1966,7 +2209,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateThemeForStackOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateThemeForStackInput, CreateThemeForStackOutput>(xAmzTarget: "PhotonAdminProxyService.CreateThemeForStack"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateThemeForStackInput, CreateThemeForStackOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.CreateThemeForStack"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateThemeForStackInput, CreateThemeForStackOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateThemeForStackInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateThemeForStackInput, CreateThemeForStackOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateThemeForStackOutput>())
@@ -2041,7 +2284,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateUpdatedImageOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateUpdatedImageInput, CreateUpdatedImageOutput>(xAmzTarget: "PhotonAdminProxyService.CreateUpdatedImage"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateUpdatedImageInput, CreateUpdatedImageOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.CreateUpdatedImage"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateUpdatedImageInput, CreateUpdatedImageOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateUpdatedImageInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateUpdatedImageInput, CreateUpdatedImageOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateUpdatedImageOutput>())
@@ -2112,7 +2355,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateUsageReportSubscriptionOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateUsageReportSubscriptionInput, CreateUsageReportSubscriptionOutput>(xAmzTarget: "PhotonAdminProxyService.CreateUsageReportSubscription"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateUsageReportSubscriptionInput, CreateUsageReportSubscriptionOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.CreateUsageReportSubscription"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateUsageReportSubscriptionInput, CreateUsageReportSubscriptionOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateUsageReportSubscriptionInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateUsageReportSubscriptionInput, CreateUsageReportSubscriptionOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateUsageReportSubscriptionOutput>())
@@ -2185,7 +2428,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateUserOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateUserInput, CreateUserOutput>(xAmzTarget: "PhotonAdminProxyService.CreateUser"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateUserInput, CreateUserOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.CreateUser"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateUserInput, CreateUserOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateUserInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateUserInput, CreateUserOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateUserOutput>())
@@ -2256,7 +2499,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteAppBlockOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteAppBlockInput, DeleteAppBlockOutput>(xAmzTarget: "PhotonAdminProxyService.DeleteAppBlock"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteAppBlockInput, DeleteAppBlockOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.DeleteAppBlock"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteAppBlockInput, DeleteAppBlockOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteAppBlockInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteAppBlockInput, DeleteAppBlockOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteAppBlockOutput>())
@@ -2328,7 +2571,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteAppBlockBuilderOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteAppBlockBuilderInput, DeleteAppBlockBuilderOutput>(xAmzTarget: "PhotonAdminProxyService.DeleteAppBlockBuilder"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteAppBlockBuilderInput, DeleteAppBlockBuilderOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.DeleteAppBlockBuilder"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteAppBlockBuilderInput, DeleteAppBlockBuilderOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteAppBlockBuilderInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteAppBlockBuilderInput, DeleteAppBlockBuilderOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteAppBlockBuilderOutput>())
@@ -2400,7 +2643,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteApplicationOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteApplicationInput, DeleteApplicationOutput>(xAmzTarget: "PhotonAdminProxyService.DeleteApplication"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteApplicationInput, DeleteApplicationOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.DeleteApplication"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteApplicationInput, DeleteApplicationOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteApplicationInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteApplicationInput, DeleteApplicationOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteApplicationOutput>())
@@ -2470,7 +2713,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteDirectoryConfigOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteDirectoryConfigInput, DeleteDirectoryConfigOutput>(xAmzTarget: "PhotonAdminProxyService.DeleteDirectoryConfig"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteDirectoryConfigInput, DeleteDirectoryConfigOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.DeleteDirectoryConfig"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteDirectoryConfigInput, DeleteDirectoryConfigOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteDirectoryConfigInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteDirectoryConfigInput, DeleteDirectoryConfigOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteDirectoryConfigOutput>())
@@ -2542,7 +2785,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteEntitlementOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteEntitlementInput, DeleteEntitlementOutput>(xAmzTarget: "PhotonAdminProxyService.DeleteEntitlement"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteEntitlementInput, DeleteEntitlementOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.DeleteEntitlement"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteEntitlementInput, DeleteEntitlementOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteEntitlementInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteEntitlementInput, DeleteEntitlementOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteEntitlementOutput>())
@@ -2613,7 +2856,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteFleetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteFleetInput, DeleteFleetOutput>(xAmzTarget: "PhotonAdminProxyService.DeleteFleet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteFleetInput, DeleteFleetOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.DeleteFleet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteFleetInput, DeleteFleetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteFleetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteFleetInput, DeleteFleetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteFleetOutput>())
@@ -2685,7 +2928,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteImageOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteImageInput, DeleteImageOutput>(xAmzTarget: "PhotonAdminProxyService.DeleteImage"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteImageInput, DeleteImageOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.DeleteImage"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteImageInput, DeleteImageOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteImageInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteImageInput, DeleteImageOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteImageOutput>())
@@ -2756,7 +2999,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteImageBuilderOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteImageBuilderInput, DeleteImageBuilderOutput>(xAmzTarget: "PhotonAdminProxyService.DeleteImageBuilder"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteImageBuilderInput, DeleteImageBuilderOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.DeleteImageBuilder"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteImageBuilderInput, DeleteImageBuilderOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteImageBuilderInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteImageBuilderInput, DeleteImageBuilderOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteImageBuilderOutput>())
@@ -2826,7 +3069,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteImagePermissionsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteImagePermissionsInput, DeleteImagePermissionsOutput>(xAmzTarget: "PhotonAdminProxyService.DeleteImagePermissions"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteImagePermissionsInput, DeleteImagePermissionsOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.DeleteImagePermissions"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteImagePermissionsInput, DeleteImagePermissionsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteImagePermissionsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteImagePermissionsInput, DeleteImagePermissionsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteImagePermissionsOutput>())
@@ -2898,7 +3141,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteStackOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteStackInput, DeleteStackOutput>(xAmzTarget: "PhotonAdminProxyService.DeleteStack"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteStackInput, DeleteStackOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.DeleteStack"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteStackInput, DeleteStackOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteStackInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteStackInput, DeleteStackOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteStackOutput>())
@@ -2969,7 +3212,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteThemeForStackOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteThemeForStackInput, DeleteThemeForStackOutput>(xAmzTarget: "PhotonAdminProxyService.DeleteThemeForStack"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteThemeForStackInput, DeleteThemeForStackOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.DeleteThemeForStack"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteThemeForStackInput, DeleteThemeForStackOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteThemeForStackInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteThemeForStackInput, DeleteThemeForStackOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteThemeForStackOutput>())
@@ -3039,7 +3282,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteUsageReportSubscriptionOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteUsageReportSubscriptionInput, DeleteUsageReportSubscriptionOutput>(xAmzTarget: "PhotonAdminProxyService.DeleteUsageReportSubscription"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteUsageReportSubscriptionInput, DeleteUsageReportSubscriptionOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.DeleteUsageReportSubscription"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteUsageReportSubscriptionInput, DeleteUsageReportSubscriptionOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteUsageReportSubscriptionInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteUsageReportSubscriptionInput, DeleteUsageReportSubscriptionOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteUsageReportSubscriptionOutput>())
@@ -3108,7 +3351,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteUserOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteUserInput, DeleteUserOutput>(xAmzTarget: "PhotonAdminProxyService.DeleteUser"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteUserInput, DeleteUserOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.DeleteUser"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteUserInput, DeleteUserOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteUserInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteUserInput, DeleteUserOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteUserOutput>())
@@ -3178,7 +3421,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeAppBlockBuilderAppBlockAssociationsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeAppBlockBuilderAppBlockAssociationsInput, DescribeAppBlockBuilderAppBlockAssociationsOutput>(xAmzTarget: "PhotonAdminProxyService.DescribeAppBlockBuilderAppBlockAssociations"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeAppBlockBuilderAppBlockAssociationsInput, DescribeAppBlockBuilderAppBlockAssociationsOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.DescribeAppBlockBuilderAppBlockAssociations"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeAppBlockBuilderAppBlockAssociationsInput, DescribeAppBlockBuilderAppBlockAssociationsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeAppBlockBuilderAppBlockAssociationsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeAppBlockBuilderAppBlockAssociationsInput, DescribeAppBlockBuilderAppBlockAssociationsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeAppBlockBuilderAppBlockAssociationsOutput>())
@@ -3248,7 +3491,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeAppBlockBuildersOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeAppBlockBuildersInput, DescribeAppBlockBuildersOutput>(xAmzTarget: "PhotonAdminProxyService.DescribeAppBlockBuilders"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeAppBlockBuildersInput, DescribeAppBlockBuildersOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.DescribeAppBlockBuilders"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeAppBlockBuildersInput, DescribeAppBlockBuildersOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeAppBlockBuildersInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeAppBlockBuildersInput, DescribeAppBlockBuildersOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeAppBlockBuildersOutput>())
@@ -3318,7 +3561,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeAppBlocksOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeAppBlocksInput, DescribeAppBlocksOutput>(xAmzTarget: "PhotonAdminProxyService.DescribeAppBlocks"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeAppBlocksInput, DescribeAppBlocksOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.DescribeAppBlocks"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeAppBlocksInput, DescribeAppBlocksOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeAppBlocksInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeAppBlocksInput, DescribeAppBlocksOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeAppBlocksOutput>())
@@ -3389,7 +3632,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeAppLicenseUsageOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeAppLicenseUsageInput, DescribeAppLicenseUsageOutput>(xAmzTarget: "PhotonAdminProxyService.DescribeAppLicenseUsage"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeAppLicenseUsageInput, DescribeAppLicenseUsageOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.DescribeAppLicenseUsage"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeAppLicenseUsageInput, DescribeAppLicenseUsageOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeAppLicenseUsageInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeAppLicenseUsageInput, DescribeAppLicenseUsageOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeAppLicenseUsageOutput>())
@@ -3459,7 +3702,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeApplicationFleetAssociationsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeApplicationFleetAssociationsInput, DescribeApplicationFleetAssociationsOutput>(xAmzTarget: "PhotonAdminProxyService.DescribeApplicationFleetAssociations"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeApplicationFleetAssociationsInput, DescribeApplicationFleetAssociationsOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.DescribeApplicationFleetAssociations"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeApplicationFleetAssociationsInput, DescribeApplicationFleetAssociationsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeApplicationFleetAssociationsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeApplicationFleetAssociationsInput, DescribeApplicationFleetAssociationsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeApplicationFleetAssociationsOutput>())
@@ -3529,7 +3772,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeApplicationsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeApplicationsInput, DescribeApplicationsOutput>(xAmzTarget: "PhotonAdminProxyService.DescribeApplications"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeApplicationsInput, DescribeApplicationsOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.DescribeApplications"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeApplicationsInput, DescribeApplicationsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeApplicationsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeApplicationsInput, DescribeApplicationsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeApplicationsOutput>())
@@ -3598,7 +3841,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeDirectoryConfigsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeDirectoryConfigsInput, DescribeDirectoryConfigsOutput>(xAmzTarget: "PhotonAdminProxyService.DescribeDirectoryConfigs"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeDirectoryConfigsInput, DescribeDirectoryConfigsOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.DescribeDirectoryConfigs"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeDirectoryConfigsInput, DescribeDirectoryConfigsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeDirectoryConfigsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeDirectoryConfigsInput, DescribeDirectoryConfigsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeDirectoryConfigsOutput>())
@@ -3669,7 +3912,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeEntitlementsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeEntitlementsInput, DescribeEntitlementsOutput>(xAmzTarget: "PhotonAdminProxyService.DescribeEntitlements"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeEntitlementsInput, DescribeEntitlementsOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.DescribeEntitlements"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeEntitlementsInput, DescribeEntitlementsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeEntitlementsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeEntitlementsInput, DescribeEntitlementsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeEntitlementsOutput>())
@@ -3738,7 +3981,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeFleetsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeFleetsInput, DescribeFleetsOutput>(xAmzTarget: "PhotonAdminProxyService.DescribeFleets"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeFleetsInput, DescribeFleetsOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.DescribeFleets"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeFleetsInput, DescribeFleetsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeFleetsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeFleetsInput, DescribeFleetsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeFleetsOutput>())
@@ -3807,7 +4050,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeImageBuildersOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeImageBuildersInput, DescribeImageBuildersOutput>(xAmzTarget: "PhotonAdminProxyService.DescribeImageBuilders"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeImageBuildersInput, DescribeImageBuildersOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.DescribeImageBuilders"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeImageBuildersInput, DescribeImageBuildersOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeImageBuildersInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeImageBuildersInput, DescribeImageBuildersOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeImageBuildersOutput>())
@@ -3876,7 +4119,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeImagePermissionsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeImagePermissionsInput, DescribeImagePermissionsOutput>(xAmzTarget: "PhotonAdminProxyService.DescribeImagePermissions"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeImagePermissionsInput, DescribeImagePermissionsOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.DescribeImagePermissions"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeImagePermissionsInput, DescribeImagePermissionsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeImagePermissionsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeImagePermissionsInput, DescribeImagePermissionsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeImagePermissionsOutput>())
@@ -3946,7 +4189,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeImagesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeImagesInput, DescribeImagesOutput>(xAmzTarget: "PhotonAdminProxyService.DescribeImages"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeImagesInput, DescribeImagesOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.DescribeImages"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeImagesInput, DescribeImagesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeImagesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeImagesInput, DescribeImagesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeImagesOutput>())
@@ -4015,7 +4258,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeSessionsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeSessionsInput, DescribeSessionsOutput>(xAmzTarget: "PhotonAdminProxyService.DescribeSessions"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeSessionsInput, DescribeSessionsOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.DescribeSessions"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeSessionsInput, DescribeSessionsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeSessionsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeSessionsInput, DescribeSessionsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeSessionsOutput>())
@@ -4085,7 +4328,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeSoftwareAssociationsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeSoftwareAssociationsInput, DescribeSoftwareAssociationsOutput>(xAmzTarget: "PhotonAdminProxyService.DescribeSoftwareAssociations"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeSoftwareAssociationsInput, DescribeSoftwareAssociationsOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.DescribeSoftwareAssociations"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeSoftwareAssociationsInput, DescribeSoftwareAssociationsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeSoftwareAssociationsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeSoftwareAssociationsInput, DescribeSoftwareAssociationsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeSoftwareAssociationsOutput>())
@@ -4154,7 +4397,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeStacksOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeStacksInput, DescribeStacksOutput>(xAmzTarget: "PhotonAdminProxyService.DescribeStacks"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeStacksInput, DescribeStacksOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.DescribeStacks"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeStacksInput, DescribeStacksOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeStacksInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeStacksInput, DescribeStacksOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeStacksOutput>())
@@ -4224,7 +4467,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeThemeForStackOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeThemeForStackInput, DescribeThemeForStackOutput>(xAmzTarget: "PhotonAdminProxyService.DescribeThemeForStack"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeThemeForStackInput, DescribeThemeForStackOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.DescribeThemeForStack"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeThemeForStackInput, DescribeThemeForStackOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeThemeForStackInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeThemeForStackInput, DescribeThemeForStackOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeThemeForStackOutput>())
@@ -4294,7 +4537,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeUsageReportSubscriptionsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeUsageReportSubscriptionsInput, DescribeUsageReportSubscriptionsOutput>(xAmzTarget: "PhotonAdminProxyService.DescribeUsageReportSubscriptions"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeUsageReportSubscriptionsInput, DescribeUsageReportSubscriptionsOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.DescribeUsageReportSubscriptions"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeUsageReportSubscriptionsInput, DescribeUsageReportSubscriptionsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeUsageReportSubscriptionsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeUsageReportSubscriptionsInput, DescribeUsageReportSubscriptionsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeUsageReportSubscriptionsOutput>())
@@ -4368,7 +4611,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeUserStackAssociationsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeUserStackAssociationsInput, DescribeUserStackAssociationsOutput>(xAmzTarget: "PhotonAdminProxyService.DescribeUserStackAssociations"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeUserStackAssociationsInput, DescribeUserStackAssociationsOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.DescribeUserStackAssociations"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeUserStackAssociationsInput, DescribeUserStackAssociationsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeUserStackAssociationsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeUserStackAssociationsInput, DescribeUserStackAssociationsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeUserStackAssociationsOutput>())
@@ -4439,7 +4682,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeUsersOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeUsersInput, DescribeUsersOutput>(xAmzTarget: "PhotonAdminProxyService.DescribeUsers"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeUsersInput, DescribeUsersOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.DescribeUsers"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeUsersInput, DescribeUsersOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeUsersInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeUsersInput, DescribeUsersOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeUsersOutput>())
@@ -4508,7 +4751,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DisableUserOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DisableUserInput, DisableUserOutput>(xAmzTarget: "PhotonAdminProxyService.DisableUser"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DisableUserInput, DisableUserOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.DisableUser"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DisableUserInput, DisableUserOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DisableUserInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DisableUserInput, DisableUserOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DisableUserOutput>())
@@ -4580,7 +4823,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DisassociateAppBlockBuilderAppBlockOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DisassociateAppBlockBuilderAppBlockInput, DisassociateAppBlockBuilderAppBlockOutput>(xAmzTarget: "PhotonAdminProxyService.DisassociateAppBlockBuilderAppBlock"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DisassociateAppBlockBuilderAppBlockInput, DisassociateAppBlockBuilderAppBlockOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.DisassociateAppBlockBuilderAppBlock"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DisassociateAppBlockBuilderAppBlockInput, DisassociateAppBlockBuilderAppBlockOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DisassociateAppBlockBuilderAppBlockInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DisassociateAppBlockBuilderAppBlockInput, DisassociateAppBlockBuilderAppBlockOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DisassociateAppBlockBuilderAppBlockOutput>())
@@ -4651,7 +4894,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DisassociateApplicationFleetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DisassociateApplicationFleetInput, DisassociateApplicationFleetOutput>(xAmzTarget: "PhotonAdminProxyService.DisassociateApplicationFleet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DisassociateApplicationFleetInput, DisassociateApplicationFleetOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.DisassociateApplicationFleet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DisassociateApplicationFleetInput, DisassociateApplicationFleetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DisassociateApplicationFleetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DisassociateApplicationFleetInput, DisassociateApplicationFleetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DisassociateApplicationFleetOutput>())
@@ -4722,7 +4965,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DisassociateApplicationFromEntitlementOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DisassociateApplicationFromEntitlementInput, DisassociateApplicationFromEntitlementOutput>(xAmzTarget: "PhotonAdminProxyService.DisassociateApplicationFromEntitlement"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DisassociateApplicationFromEntitlementInput, DisassociateApplicationFromEntitlementOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.DisassociateApplicationFromEntitlement"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DisassociateApplicationFromEntitlementInput, DisassociateApplicationFromEntitlementOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DisassociateApplicationFromEntitlementInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DisassociateApplicationFromEntitlementInput, DisassociateApplicationFromEntitlementOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DisassociateApplicationFromEntitlementOutput>())
@@ -4794,7 +5037,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DisassociateFleetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DisassociateFleetInput, DisassociateFleetOutput>(xAmzTarget: "PhotonAdminProxyService.DisassociateFleet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DisassociateFleetInput, DisassociateFleetOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.DisassociateFleet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DisassociateFleetInput, DisassociateFleetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DisassociateFleetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DisassociateFleetInput, DisassociateFleetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DisassociateFleetOutput>())
@@ -4866,7 +5109,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DisassociateSoftwareFromImageBuilderOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DisassociateSoftwareFromImageBuilderInput, DisassociateSoftwareFromImageBuilderOutput>(xAmzTarget: "PhotonAdminProxyService.DisassociateSoftwareFromImageBuilder"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DisassociateSoftwareFromImageBuilderInput, DisassociateSoftwareFromImageBuilderOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.DisassociateSoftwareFromImageBuilder"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DisassociateSoftwareFromImageBuilderInput, DisassociateSoftwareFromImageBuilderOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DisassociateSoftwareFromImageBuilderInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DisassociateSoftwareFromImageBuilderInput, DisassociateSoftwareFromImageBuilderOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DisassociateSoftwareFromImageBuilderOutput>())
@@ -4936,7 +5179,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<EnableUserOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<EnableUserInput, EnableUserOutput>(xAmzTarget: "PhotonAdminProxyService.EnableUser"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<EnableUserInput, EnableUserOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.EnableUser"]))
         builder.serialize(ClientRuntime.BodyMiddleware<EnableUserInput, EnableUserOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: EnableUserInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<EnableUserInput, EnableUserOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<EnableUserOutput>())
@@ -5000,7 +5243,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ExpireSessionOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ExpireSessionInput, ExpireSessionOutput>(xAmzTarget: "PhotonAdminProxyService.ExpireSession"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ExpireSessionInput, ExpireSessionOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.ExpireSession"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ExpireSessionInput, ExpireSessionOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ExpireSessionInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ExpireSessionInput, ExpireSessionOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ExpireSessionOutput>())
@@ -5070,7 +5313,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetExportImageTaskOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetExportImageTaskInput, GetExportImageTaskOutput>(xAmzTarget: "PhotonAdminProxyService.GetExportImageTask"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetExportImageTaskInput, GetExportImageTaskOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.GetExportImageTask"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetExportImageTaskInput, GetExportImageTaskOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetExportImageTaskInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetExportImageTaskInput, GetExportImageTaskOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetExportImageTaskOutput>())
@@ -5134,7 +5377,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListAssociatedFleetsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListAssociatedFleetsInput, ListAssociatedFleetsOutput>(xAmzTarget: "PhotonAdminProxyService.ListAssociatedFleets"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListAssociatedFleetsInput, ListAssociatedFleetsOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.ListAssociatedFleets"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListAssociatedFleetsInput, ListAssociatedFleetsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListAssociatedFleetsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListAssociatedFleetsInput, ListAssociatedFleetsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListAssociatedFleetsOutput>())
@@ -5198,7 +5441,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListAssociatedStacksOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListAssociatedStacksInput, ListAssociatedStacksOutput>(xAmzTarget: "PhotonAdminProxyService.ListAssociatedStacks"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListAssociatedStacksInput, ListAssociatedStacksOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.ListAssociatedStacks"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListAssociatedStacksInput, ListAssociatedStacksOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListAssociatedStacksInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListAssociatedStacksInput, ListAssociatedStacksOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListAssociatedStacksOutput>())
@@ -5269,7 +5512,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListEntitledApplicationsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListEntitledApplicationsInput, ListEntitledApplicationsOutput>(xAmzTarget: "PhotonAdminProxyService.ListEntitledApplications"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListEntitledApplicationsInput, ListEntitledApplicationsOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.ListEntitledApplications"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListEntitledApplicationsInput, ListEntitledApplicationsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListEntitledApplicationsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListEntitledApplicationsInput, ListEntitledApplicationsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListEntitledApplicationsOutput>())
@@ -5338,7 +5581,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListExportImageTasksOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListExportImageTasksInput, ListExportImageTasksOutput>(xAmzTarget: "PhotonAdminProxyService.ListExportImageTasks"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListExportImageTasksInput, ListExportImageTasksOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.ListExportImageTasks"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListExportImageTasksInput, ListExportImageTasksOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListExportImageTasksInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListExportImageTasksInput, ListExportImageTasksOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListExportImageTasksOutput>())
@@ -5407,7 +5650,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListTagsForResourceOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListTagsForResourceInput, ListTagsForResourceOutput>(xAmzTarget: "PhotonAdminProxyService.ListTagsForResource"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListTagsForResourceInput, ListTagsForResourceOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.ListTagsForResource"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListTagsForResourceInput, ListTagsForResourceOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListTagsForResourceInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListTagsForResourceInput, ListTagsForResourceOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListTagsForResourceOutput>())
@@ -5482,7 +5725,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<StartAppBlockBuilderOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<StartAppBlockBuilderInput, StartAppBlockBuilderOutput>(xAmzTarget: "PhotonAdminProxyService.StartAppBlockBuilder"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<StartAppBlockBuilderInput, StartAppBlockBuilderOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.StartAppBlockBuilder"]))
         builder.serialize(ClientRuntime.BodyMiddleware<StartAppBlockBuilderInput, StartAppBlockBuilderOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: StartAppBlockBuilderInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<StartAppBlockBuilderInput, StartAppBlockBuilderOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<StartAppBlockBuilderOutput>())
@@ -5558,7 +5801,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<StartFleetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<StartFleetInput, StartFleetOutput>(xAmzTarget: "PhotonAdminProxyService.StartFleet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<StartFleetInput, StartFleetOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.StartFleet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<StartFleetInput, StartFleetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: StartFleetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<StartFleetInput, StartFleetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<StartFleetOutput>())
@@ -5631,7 +5874,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<StartImageBuilderOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<StartImageBuilderInput, StartImageBuilderOutput>(xAmzTarget: "PhotonAdminProxyService.StartImageBuilder"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<StartImageBuilderInput, StartImageBuilderOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.StartImageBuilder"]))
         builder.serialize(ClientRuntime.BodyMiddleware<StartImageBuilderInput, StartImageBuilderOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: StartImageBuilderInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<StartImageBuilderInput, StartImageBuilderOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<StartImageBuilderOutput>())
@@ -5702,7 +5945,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<StartSoftwareDeploymentToImageBuilderOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<StartSoftwareDeploymentToImageBuilderInput, StartSoftwareDeploymentToImageBuilderOutput>(xAmzTarget: "PhotonAdminProxyService.StartSoftwareDeploymentToImageBuilder"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<StartSoftwareDeploymentToImageBuilderInput, StartSoftwareDeploymentToImageBuilderOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.StartSoftwareDeploymentToImageBuilder"]))
         builder.serialize(ClientRuntime.BodyMiddleware<StartSoftwareDeploymentToImageBuilderInput, StartSoftwareDeploymentToImageBuilderOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: StartSoftwareDeploymentToImageBuilderInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<StartSoftwareDeploymentToImageBuilderInput, StartSoftwareDeploymentToImageBuilderOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<StartSoftwareDeploymentToImageBuilderOutput>())
@@ -5773,7 +6016,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<StopAppBlockBuilderOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<StopAppBlockBuilderInput, StopAppBlockBuilderOutput>(xAmzTarget: "PhotonAdminProxyService.StopAppBlockBuilder"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<StopAppBlockBuilderInput, StopAppBlockBuilderOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.StopAppBlockBuilder"]))
         builder.serialize(ClientRuntime.BodyMiddleware<StopAppBlockBuilderInput, StopAppBlockBuilderOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: StopAppBlockBuilderInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<StopAppBlockBuilderInput, StopAppBlockBuilderOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<StopAppBlockBuilderOutput>())
@@ -5843,7 +6086,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<StopFleetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<StopFleetInput, StopFleetOutput>(xAmzTarget: "PhotonAdminProxyService.StopFleet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<StopFleetInput, StopFleetOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.StopFleet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<StopFleetInput, StopFleetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: StopFleetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<StopFleetInput, StopFleetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<StopFleetOutput>())
@@ -5914,7 +6157,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<StopImageBuilderOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<StopImageBuilderInput, StopImageBuilderOutput>(xAmzTarget: "PhotonAdminProxyService.StopImageBuilder"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<StopImageBuilderInput, StopImageBuilderOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.StopImageBuilder"]))
         builder.serialize(ClientRuntime.BodyMiddleware<StopImageBuilderInput, StopImageBuilderOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: StopImageBuilderInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<StopImageBuilderInput, StopImageBuilderOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<StopImageBuilderOutput>())
@@ -5985,7 +6228,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<TagResourceOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<TagResourceInput, TagResourceOutput>(xAmzTarget: "PhotonAdminProxyService.TagResource"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<TagResourceInput, TagResourceOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.TagResource"]))
         builder.serialize(ClientRuntime.BodyMiddleware<TagResourceInput, TagResourceOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: TagResourceInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<TagResourceInput, TagResourceOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<TagResourceOutput>())
@@ -6054,7 +6297,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UntagResourceOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UntagResourceInput, UntagResourceOutput>(xAmzTarget: "PhotonAdminProxyService.UntagResource"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UntagResourceInput, UntagResourceOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.UntagResource"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UntagResourceInput, UntagResourceOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UntagResourceInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UntagResourceInput, UntagResourceOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UntagResourceOutput>())
@@ -6132,7 +6375,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateAppBlockBuilderOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateAppBlockBuilderInput, UpdateAppBlockBuilderOutput>(xAmzTarget: "PhotonAdminProxyService.UpdateAppBlockBuilder"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateAppBlockBuilderInput, UpdateAppBlockBuilderOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.UpdateAppBlockBuilder"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateAppBlockBuilderInput, UpdateAppBlockBuilderOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateAppBlockBuilderInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateAppBlockBuilderInput, UpdateAppBlockBuilderOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateAppBlockBuilderOutput>())
@@ -6203,7 +6446,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateApplicationOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateApplicationInput, UpdateApplicationOutput>(xAmzTarget: "PhotonAdminProxyService.UpdateApplication"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateApplicationInput, UpdateApplicationOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.UpdateApplication"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateApplicationInput, UpdateApplicationOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateApplicationInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateApplicationInput, UpdateApplicationOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateApplicationOutput>())
@@ -6277,7 +6520,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateDirectoryConfigOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateDirectoryConfigInput, UpdateDirectoryConfigOutput>(xAmzTarget: "PhotonAdminProxyService.UpdateDirectoryConfig"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateDirectoryConfigInput, UpdateDirectoryConfigOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.UpdateDirectoryConfig"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateDirectoryConfigInput, UpdateDirectoryConfigOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateDirectoryConfigInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateDirectoryConfigInput, UpdateDirectoryConfigOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateDirectoryConfigOutput>())
@@ -6349,7 +6592,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateEntitlementOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateEntitlementInput, UpdateEntitlementOutput>(xAmzTarget: "PhotonAdminProxyService.UpdateEntitlement"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateEntitlementInput, UpdateEntitlementOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.UpdateEntitlement"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateEntitlementInput, UpdateEntitlementOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateEntitlementInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateEntitlementInput, UpdateEntitlementOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateEntitlementOutput>())
@@ -6435,7 +6678,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateFleetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateFleetInput, UpdateFleetOutput>(xAmzTarget: "PhotonAdminProxyService.UpdateFleet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateFleetInput, UpdateFleetOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.UpdateFleet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateFleetInput, UpdateFleetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateFleetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateFleetInput, UpdateFleetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateFleetOutput>())
@@ -6506,7 +6749,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateImagePermissionsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateImagePermissionsInput, UpdateImagePermissionsOutput>(xAmzTarget: "PhotonAdminProxyService.UpdateImagePermissions"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateImagePermissionsInput, UpdateImagePermissionsOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.UpdateImagePermissions"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateImagePermissionsInput, UpdateImagePermissionsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateImagePermissionsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateImagePermissionsInput, UpdateImagePermissionsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateImagePermissionsOutput>())
@@ -6583,7 +6826,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateStackOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateStackInput, UpdateStackOutput>(xAmzTarget: "PhotonAdminProxyService.UpdateStack"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateStackInput, UpdateStackOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.UpdateStack"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateStackInput, UpdateStackOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateStackInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateStackInput, UpdateStackOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateStackOutput>())
@@ -6657,7 +6900,7 @@ extension AppStreamClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateThemeForStackOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateThemeForStackInput, UpdateThemeForStackOutput>(xAmzTarget: "PhotonAdminProxyService.UpdateThemeForStack"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateThemeForStackInput, UpdateThemeForStackOutput>(overrides: ["X-Amz-Target": "PhotonAdminProxyService.UpdateThemeForStack"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateThemeForStackInput, UpdateThemeForStackOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateThemeForStackInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateThemeForStackInput, UpdateThemeForStackOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateThemeForStackOutput>())

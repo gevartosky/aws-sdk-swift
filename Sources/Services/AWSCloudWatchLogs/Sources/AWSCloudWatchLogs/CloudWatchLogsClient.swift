@@ -29,6 +29,7 @@ import enum AWSSDKChecksums.AWSChecksumCalculationMode
 import enum ClientRuntime.ClientLogMode
 import enum ClientRuntime.DefaultTelemetry
 import enum ClientRuntime.OrchestratorMetricsAttributesKeys
+import func ClientRuntime.initialize
 import protocol AWSClientRuntime.AWSDefaultClientConfiguration
 import protocol AWSClientRuntime.AWSRegionClientConfiguration
 import protocol AWSClientRuntime.AWSServiceClient
@@ -47,7 +48,6 @@ import protocol SmithyIdentity.BearerTokenIdentityResolver
 @_spi(AWSEndpointResolverMiddleware) import struct AWSClientRuntime.AWSEndpointResolverMiddleware
 import struct AWSClientRuntime.AmzSdkInvocationIdMiddleware
 import struct AWSClientRuntime.UserAgentMiddleware
-import struct AWSClientRuntime.XAmzTargetMiddleware
 import struct AWSSDKHTTPAuth.SigV4AuthScheme
 import struct ClientRuntime.AuthSchemeMiddleware
 @_spi(SmithyReadWrite) import struct ClientRuntime.BodyMiddleware
@@ -56,6 +56,9 @@ import struct ClientRuntime.ContentTypeMiddleware
 @_spi(SmithyReadWrite) import struct ClientRuntime.DeserializeMiddleware
 import struct ClientRuntime.IdempotencyTokenMiddleware
 import struct ClientRuntime.LoggerMiddleware
+import struct ClientRuntime.MutateHeadersMiddleware
+import struct ClientRuntime.SendableHttpInterceptorProviderBox
+import struct ClientRuntime.SendableInterceptorProviderBox
 import struct ClientRuntime.SignerMiddleware
 import struct ClientRuntime.URLHostMiddleware
 import struct ClientRuntime.URLPathMiddleware
@@ -66,31 +69,49 @@ import struct SmithyRetries.DefaultRetryStrategy
 import struct SmithyRetriesAPI.RetryStrategyOptions
 import typealias SmithyHTTPAuthAPI.AuthSchemes
 
-public class CloudWatchLogsClient: AWSClientRuntime.AWSServiceClient {
+public final class CloudWatchLogsClient: AWSClientRuntime.AWSServiceClient {
     public static let clientName = "CloudWatchLogsClient"
     let client: ClientRuntime.SdkHttpClient
-    let config: CloudWatchLogsClient.CloudWatchLogsClientConfiguration
+    public let config: CloudWatchLogsClient.CloudWatchLogsClientConfig
     let serviceName = "CloudWatch Logs"
 
-    public required init(config: CloudWatchLogsClient.CloudWatchLogsClientConfiguration) {
+    @available(*, deprecated, message: "Use CloudWatchLogsClient.CloudWatchLogsClientConfig instead")
+    public typealias Config = CloudWatchLogsClient.CloudWatchLogsClientConfiguration
+    public typealias Configuration = CloudWatchLogsClient.CloudWatchLogsClientConfig
+
+    public required init(config: CloudWatchLogsClient.CloudWatchLogsClientConfig) {
+        ClientRuntime.initialize()
         client = ClientRuntime.SdkHttpClient(engine: config.httpClientEngine, config: config.httpClientConfiguration)
         self.config = config
     }
 
+    @available(*, deprecated, message: "Use init(config: CloudWatchLogsClient.CloudWatchLogsClientConfig) instead")
+    public convenience init(config: CloudWatchLogsClient.CloudWatchLogsClientConfiguration) {
+        do {
+            try self.init(config: config.toSendable())
+        } catch {
+            // This should never happen since all values are already initialized in the class
+            fatalError("Failed to convert deprecated configuration: \(error)")
+        }
+    }
+
     public convenience init(region: Swift.String) throws {
-        let config = try CloudWatchLogsClient.CloudWatchLogsClientConfiguration(region: region)
+        let config = try CloudWatchLogsClient.CloudWatchLogsClientConfig(region: region)
         self.init(config: config)
     }
 
-    public convenience required init() async throws {
-        let config = try await CloudWatchLogsClient.CloudWatchLogsClientConfiguration()
+    public convenience init() async throws {
+        let config = try await CloudWatchLogsClient.CloudWatchLogsClientConfig()
         self.init(config: config)
     }
 }
 
 extension CloudWatchLogsClient {
 
-    public class CloudWatchLogsClientConfiguration: AWSClientRuntime.AWSDefaultClientConfiguration & AWSClientRuntime.AWSRegionClientConfiguration & ClientRuntime.DefaultClientConfiguration & ClientRuntime.DefaultHttpClientConfiguration {
+    /// Client configuration for CloudWatchLogsClient
+    ///
+    /// Conforms to `Sendable` for safe concurrent access across threads.
+    public struct CloudWatchLogsClientConfig: AWSClientRuntime.AWSDefaultClientConfiguration & AWSClientRuntime.AWSRegionClientConfiguration & ClientRuntime.DefaultClientConfiguration & ClientRuntime.DefaultHttpClientConfiguration, Swift.Sendable {
         public var useFIPS: Swift.Bool?
         public var useDualStack: Swift.Bool?
         public var appID: Swift.String?
@@ -114,66 +135,29 @@ extension CloudWatchLogsClient {
         public var authSchemePreference: [String]?
         public var authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver
         public var bearerTokenIdentityResolver: any SmithyIdentity.BearerTokenIdentityResolver
-        public private(set) var interceptorProviders: [ClientRuntime.InterceptorProvider]
-        public private(set) var httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]
-        public let logger: Smithy.LogAgent
-
-        private init(
-            _ useFIPS: Swift.Bool?,
-            _ useDualStack: Swift.Bool?,
-            _ appID: Swift.String?,
-            _ awsCredentialIdentityResolver: any SmithyIdentity.AWSCredentialIdentityResolver,
-            _ awsRetryMode: AWSClientRuntime.AWSRetryMode,
-            _ maxAttempts: Swift.Int?,
-            _ requestChecksumCalculation: AWSSDKChecksums.AWSChecksumCalculationMode,
-            _ responseChecksumValidation: AWSSDKChecksums.AWSChecksumCalculationMode,
-            _ ignoreConfiguredEndpointURLs: Swift.Bool?,
-            _ region: Swift.String?,
-            _ signingRegion: Swift.String?,
-            _ endpointResolver: EndpointResolver,
-            _ telemetryProvider: ClientRuntime.TelemetryProvider,
-            _ retryStrategyOptions: SmithyRetriesAPI.RetryStrategyOptions,
-            _ clientLogMode: ClientRuntime.ClientLogMode,
-            _ endpoint: Swift.String?,
-            _ idempotencyTokenGenerator: ClientRuntime.IdempotencyTokenGenerator,
-            _ httpClientEngine: SmithyHTTPAPI.HTTPClient,
-            _ httpClientConfiguration: ClientRuntime.HttpClientConfiguration,
-            _ authSchemes: SmithyHTTPAuthAPI.AuthSchemes?,
-            _ authSchemePreference: [String]?,
-            _ authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver,
-            _ bearerTokenIdentityResolver: any SmithyIdentity.BearerTokenIdentityResolver,
-            _ interceptorProviders: [ClientRuntime.InterceptorProvider],
-            _ httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]
-        ) {
-            self.useFIPS = useFIPS
-            self.useDualStack = useDualStack
-            self.appID = appID
-            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver
-            self.awsRetryMode = awsRetryMode
-            self.maxAttempts = maxAttempts
-            self.requestChecksumCalculation = requestChecksumCalculation
-            self.responseChecksumValidation = responseChecksumValidation
-            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
-            self.region = region
-            self.signingRegion = signingRegion
-            self.endpointResolver = endpointResolver
-            self.telemetryProvider = telemetryProvider
-            self.retryStrategyOptions = retryStrategyOptions
-            self.clientLogMode = clientLogMode
-            self.endpoint = endpoint
-            self.idempotencyTokenGenerator = idempotencyTokenGenerator
-            self.httpClientEngine = httpClientEngine
-            self.httpClientConfiguration = httpClientConfiguration
-            self.authSchemes = authSchemes
-            self.authSchemePreference = authSchemePreference
-            self.authSchemeResolver = authSchemeResolver
-            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver
-            self.interceptorProviders = interceptorProviders
-            self.httpInterceptorProviders = httpInterceptorProviders
-            self.logger = telemetryProvider.loggerProvider.getLogger(name: CloudWatchLogsClient.clientName)
+        // Interceptor providers with Sendable-safe internal storage
+        private var _interceptorProviders: [ClientRuntime.SendableInterceptorProviderBox] = []
+        public var interceptorProviders: [ClientRuntime.InterceptorProvider] {
+            get {
+                return _interceptorProviders
+            }
+            set {
+                _interceptorProviders = newValue.map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            }
         }
 
-        public convenience init(
+        private var _httpInterceptorProviders: [ClientRuntime.SendableHttpInterceptorProviderBox] = []
+        public var httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider] {
+            get {
+                return _httpInterceptorProviders
+            }
+            set {
+                _httpInterceptorProviders = newValue.map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            }
+        }
+        public var logger: Smithy.LogAgent
+
+        public init(
             useFIPS: Swift.Bool? = nil,
             useDualStack: Swift.Bool? = nil,
             appID: Swift.String? = nil,
@@ -200,36 +184,35 @@ extension CloudWatchLogsClient {
             interceptorProviders: [ClientRuntime.InterceptorProvider]? = nil,
             httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]? = nil
         ) throws {
-            self.init(
-                useFIPS,
-                useDualStack,
-                try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
-                awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
-                try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
-                maxAttempts,
-                try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation),
-                try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation),
-                ignoreConfiguredEndpointURLs,
-                region,
-                signingRegion,
-                try endpointResolver ?? DefaultEndpointResolver(),
-                telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider,
-                try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts),
-                clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode(),
-                endpoint,
-                idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
-                httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration),
-                httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration(),
-                authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()],
-                authSchemePreference ?? nil,
-                authSchemeResolver ?? DefaultCloudWatchLogsAuthSchemeResolver(),
-                bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
-                interceptorProviders ?? [],
-                httpInterceptorProviders ?? []
-            )
+            self.useFIPS = useFIPS
+            self.useDualStack = useDualStack
+            self.appID = try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID()
+            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain()
+            self.awsRetryMode = try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode()
+            self.maxAttempts = maxAttempts
+            self.requestChecksumCalculation = try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation)
+            self.responseChecksumValidation = try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation)
+            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
+            self.region = region
+            self.signingRegion = signingRegion
+            self.endpointResolver = try endpointResolver ?? DefaultEndpointResolver()
+            self.telemetryProvider = telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider
+            self.retryStrategyOptions = try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts)
+            self.clientLogMode = clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode()
+            self.endpoint = endpoint
+            self.idempotencyTokenGenerator = idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator()
+            self.httpClientEngine = httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration)
+            self.httpClientConfiguration = httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration()
+            self.authSchemes = authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()]
+            self.authSchemePreference = authSchemePreference ?? nil
+            self.authSchemeResolver = authSchemeResolver ?? DefaultCloudWatchLogsAuthSchemeResolver()
+            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: ""))
+            self._interceptorProviders = (interceptorProviders ?? []).map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            self._httpInterceptorProviders = (httpInterceptorProviders ?? []).map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            self.logger = (telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider).loggerProvider.getLogger(name: CloudWatchLogsClient.clientName)
         }
 
-        public convenience init(
+        public init(
             useFIPS: Swift.Bool? = nil,
             useDualStack: Swift.Bool? = nil,
             appID: Swift.String? = nil,
@@ -256,36 +239,266 @@ extension CloudWatchLogsClient {
             interceptorProviders: [ClientRuntime.InterceptorProvider]? = nil,
             httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]? = nil
         ) async throws {
-            self.init(
-                useFIPS,
-                useDualStack,
-                try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
-                awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
-                try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
-                maxAttempts,
-                try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation),
-                try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation),
-                ignoreConfiguredEndpointURLs,
-                try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region),
-                try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region),
-                try endpointResolver ?? DefaultEndpointResolver(),
-                telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider,
-                try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts),
-                clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode(),
-                endpoint,
-                idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
-                httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration),
-                httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration(),
-                authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()],
-                authSchemePreference ?? nil,
-                authSchemeResolver ?? DefaultCloudWatchLogsAuthSchemeResolver(),
-                bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
-                interceptorProviders ?? [],
-                httpInterceptorProviders ?? []
+            self.useFIPS = useFIPS
+            self.useDualStack = useDualStack
+            self.appID = try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID()
+            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain()
+            self.awsRetryMode = try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode()
+            self.maxAttempts = maxAttempts
+            self.requestChecksumCalculation = try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation)
+            self.responseChecksumValidation = try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation)
+            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
+            self.region = try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region)
+            self.signingRegion = try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region)
+            self.endpointResolver = try endpointResolver ?? DefaultEndpointResolver()
+            self.telemetryProvider = telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider
+            self.retryStrategyOptions = try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts)
+            self.clientLogMode = clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode()
+            self.endpoint = endpoint
+            self.idempotencyTokenGenerator = idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator()
+            self.httpClientEngine = httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration)
+            self.httpClientConfiguration = httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration()
+            self.authSchemes = authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()]
+            self.authSchemePreference = authSchemePreference ?? nil
+            self.authSchemeResolver = authSchemeResolver ?? DefaultCloudWatchLogsAuthSchemeResolver()
+            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: ""))
+            self._interceptorProviders = (interceptorProviders ?? []).map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            self._httpInterceptorProviders = (httpInterceptorProviders ?? []).map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            self.logger = (telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider).loggerProvider.getLogger(name: CloudWatchLogsClient.clientName)
+        }
+
+        public init() async throws {
+            try await self.init(
+                useFIPS: nil,
+                useDualStack: nil,
+                appID: nil,
+                awsCredentialIdentityResolver: nil,
+                awsRetryMode: nil,
+                maxAttempts: nil,
+                requestChecksumCalculation: nil,
+                responseChecksumValidation: nil,
+                ignoreConfiguredEndpointURLs: nil,
+                region: nil,
+                signingRegion: nil,
+                endpointResolver: nil,
+                telemetryProvider: nil,
+                retryStrategyOptions: nil,
+                clientLogMode: nil,
+                endpoint: nil,
+                idempotencyTokenGenerator: nil,
+                httpClientEngine: nil,
+                httpClientConfiguration: nil,
+                authSchemes: nil,
+                authSchemePreference: nil,
+                authSchemeResolver: nil,
+                bearerTokenIdentityResolver: nil,
+                interceptorProviders: nil,
+                httpInterceptorProviders: nil
             )
         }
 
-        public convenience required init() async throws {
+        public init(region: Swift.String) throws {
+            try self.init(
+                useFIPS: nil,
+                useDualStack: nil,
+                appID: try AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
+                awsCredentialIdentityResolver: AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
+                awsRetryMode: try AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
+                maxAttempts: nil,
+                requestChecksumCalculation: try AWSClientConfigDefaultsProvider.requestChecksumCalculation(),
+                responseChecksumValidation: try AWSClientConfigDefaultsProvider.responseChecksumValidation(),
+                ignoreConfiguredEndpointURLs: nil,
+                region: region,
+                signingRegion: region,
+                endpointResolver: try DefaultEndpointResolver(),
+                telemetryProvider: ClientRuntime.DefaultTelemetry.provider,
+                retryStrategyOptions: try AWSClientConfigDefaultsProvider.retryStrategyOptions(),
+                clientLogMode: AWSClientConfigDefaultsProvider.clientLogMode(),
+                endpoint: nil,
+                idempotencyTokenGenerator: AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
+                httpClientEngine: AWSClientConfigDefaultsProvider.httpClientEngine(),
+                httpClientConfiguration: AWSClientConfigDefaultsProvider.httpClientConfiguration(),
+                authSchemes: [AWSSDKHTTPAuth.SigV4AuthScheme()],
+                authSchemePreference: nil,
+                authSchemeResolver: DefaultCloudWatchLogsAuthSchemeResolver(),
+                bearerTokenIdentityResolver: SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
+                interceptorProviders: [],
+                httpInterceptorProviders: []
+            )
+        }
+
+        public var partitionID: String? {
+            return "\(CloudWatchLogsClient.clientName) - \(region ?? "")"
+        }
+
+        public mutating func addInterceptorProvider(_ provider: ClientRuntime.InterceptorProvider) {
+            self._interceptorProviders.append(ClientRuntime.SendableInterceptorProviderBox(provider))
+        }
+
+        public mutating func addInterceptorProvider(_ provider: ClientRuntime.HttpInterceptorProvider) {
+            self._httpInterceptorProviders.append(ClientRuntime.SendableHttpInterceptorProviderBox(provider))
+        }
+
+    }
+
+    @available(*, deprecated, message: "Use CloudWatchLogsClientConfig instead. This class will be removed in a future version.")
+    public final class CloudWatchLogsClientConfiguration: AWSClientRuntime.AWSDefaultClientConfiguration & AWSClientRuntime.AWSRegionClientConfiguration & ClientRuntime.DefaultClientConfiguration & ClientRuntime.DefaultHttpClientConfiguration {
+        public var useFIPS: Swift.Bool?
+        public var useDualStack: Swift.Bool?
+        public var appID: Swift.String?
+        public var awsCredentialIdentityResolver: any SmithyIdentity.AWSCredentialIdentityResolver
+        public var awsRetryMode: AWSClientRuntime.AWSRetryMode
+        public var maxAttempts: Swift.Int?
+        public var requestChecksumCalculation: AWSSDKChecksums.AWSChecksumCalculationMode
+        public var responseChecksumValidation: AWSSDKChecksums.AWSChecksumCalculationMode
+        public var ignoreConfiguredEndpointURLs: Swift.Bool?
+        public var region: Swift.String?
+        public var signingRegion: Swift.String?
+        public var endpointResolver: EndpointResolver
+        public var telemetryProvider: ClientRuntime.TelemetryProvider
+        public var retryStrategyOptions: SmithyRetriesAPI.RetryStrategyOptions
+        public var clientLogMode: ClientRuntime.ClientLogMode
+        public var endpoint: Swift.String?
+        public var idempotencyTokenGenerator: ClientRuntime.IdempotencyTokenGenerator
+        public var httpClientEngine: SmithyHTTPAPI.HTTPClient
+        public var httpClientConfiguration: ClientRuntime.HttpClientConfiguration
+        public var authSchemes: SmithyHTTPAuthAPI.AuthSchemes?
+        public var authSchemePreference: [String]?
+        public var authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver
+        public var bearerTokenIdentityResolver: any SmithyIdentity.BearerTokenIdentityResolver
+        // Interceptor providers with Sendable-safe internal storage
+        private var _interceptorProviders: [ClientRuntime.SendableInterceptorProviderBox] = []
+        public var interceptorProviders: [ClientRuntime.InterceptorProvider] {
+            get {
+                return _interceptorProviders
+            }
+            set {
+                _interceptorProviders = newValue.map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            }
+        }
+
+        private var _httpInterceptorProviders: [ClientRuntime.SendableHttpInterceptorProviderBox] = []
+        public var httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider] {
+            get {
+                return _httpInterceptorProviders
+            }
+            set {
+                _httpInterceptorProviders = newValue.map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            }
+        }
+        public var logger: Smithy.LogAgent
+
+        public init(
+            useFIPS: Swift.Bool? = nil,
+            useDualStack: Swift.Bool? = nil,
+            appID: Swift.String? = nil,
+            awsCredentialIdentityResolver: (any SmithyIdentity.AWSCredentialIdentityResolver)? = nil,
+            awsRetryMode: AWSClientRuntime.AWSRetryMode? = nil,
+            maxAttempts: Swift.Int? = nil,
+            requestChecksumCalculation: AWSSDKChecksums.AWSChecksumCalculationMode? = nil,
+            responseChecksumValidation: AWSSDKChecksums.AWSChecksumCalculationMode? = nil,
+            ignoreConfiguredEndpointURLs: Swift.Bool? = nil,
+            region: Swift.String? = nil,
+            signingRegion: Swift.String? = nil,
+            endpointResolver: EndpointResolver? = nil,
+            telemetryProvider: ClientRuntime.TelemetryProvider? = nil,
+            retryStrategyOptions: SmithyRetriesAPI.RetryStrategyOptions? = nil,
+            clientLogMode: ClientRuntime.ClientLogMode? = nil,
+            endpoint: Swift.String? = nil,
+            idempotencyTokenGenerator: ClientRuntime.IdempotencyTokenGenerator? = nil,
+            httpClientEngine: SmithyHTTPAPI.HTTPClient? = nil,
+            httpClientConfiguration: ClientRuntime.HttpClientConfiguration? = nil,
+            authSchemes: SmithyHTTPAuthAPI.AuthSchemes? = nil,
+            authSchemePreference: [String]? = nil,
+            authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver? = nil,
+            bearerTokenIdentityResolver: (any SmithyIdentity.BearerTokenIdentityResolver)? = nil,
+            interceptorProviders: [ClientRuntime.InterceptorProvider]? = nil,
+            httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]? = nil
+        ) throws {
+            self.useFIPS = useFIPS
+            self.useDualStack = useDualStack
+            self.appID = try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID()
+            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain()
+            self.awsRetryMode = try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode()
+            self.maxAttempts = maxAttempts
+            self.requestChecksumCalculation = try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation)
+            self.responseChecksumValidation = try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation)
+            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
+            self.region = region
+            self.signingRegion = signingRegion
+            self.endpointResolver = try endpointResolver ?? DefaultEndpointResolver()
+            self.telemetryProvider = telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider
+            self.retryStrategyOptions = try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts)
+            self.clientLogMode = clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode()
+            self.endpoint = endpoint
+            self.idempotencyTokenGenerator = idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator()
+            self.httpClientEngine = httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration)
+            self.httpClientConfiguration = httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration()
+            self.authSchemes = authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()]
+            self.authSchemePreference = authSchemePreference ?? nil
+            self.authSchemeResolver = authSchemeResolver ?? DefaultCloudWatchLogsAuthSchemeResolver()
+            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: ""))
+            self._interceptorProviders = (interceptorProviders ?? []).map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            self._httpInterceptorProviders = (httpInterceptorProviders ?? []).map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            self.logger = (telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider).loggerProvider.getLogger(name: CloudWatchLogsClient.clientName)
+        }
+
+        public init(
+            useFIPS: Swift.Bool? = nil,
+            useDualStack: Swift.Bool? = nil,
+            appID: Swift.String? = nil,
+            awsCredentialIdentityResolver: (any SmithyIdentity.AWSCredentialIdentityResolver)? = nil,
+            awsRetryMode: AWSClientRuntime.AWSRetryMode? = nil,
+            maxAttempts: Swift.Int? = nil,
+            requestChecksumCalculation: AWSSDKChecksums.AWSChecksumCalculationMode? = nil,
+            responseChecksumValidation: AWSSDKChecksums.AWSChecksumCalculationMode? = nil,
+            ignoreConfiguredEndpointURLs: Swift.Bool? = nil,
+            region: Swift.String? = nil,
+            signingRegion: Swift.String? = nil,
+            endpointResolver: EndpointResolver? = nil,
+            telemetryProvider: ClientRuntime.TelemetryProvider? = nil,
+            retryStrategyOptions: SmithyRetriesAPI.RetryStrategyOptions? = nil,
+            clientLogMode: ClientRuntime.ClientLogMode? = nil,
+            endpoint: Swift.String? = nil,
+            idempotencyTokenGenerator: ClientRuntime.IdempotencyTokenGenerator? = nil,
+            httpClientEngine: SmithyHTTPAPI.HTTPClient? = nil,
+            httpClientConfiguration: ClientRuntime.HttpClientConfiguration? = nil,
+            authSchemes: SmithyHTTPAuthAPI.AuthSchemes? = nil,
+            authSchemePreference: [String]? = nil,
+            authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver? = nil,
+            bearerTokenIdentityResolver: (any SmithyIdentity.BearerTokenIdentityResolver)? = nil,
+            interceptorProviders: [ClientRuntime.InterceptorProvider]? = nil,
+            httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]? = nil
+        ) async throws {
+            self.useFIPS = useFIPS
+            self.useDualStack = useDualStack
+            self.appID = try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID()
+            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain()
+            self.awsRetryMode = try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode()
+            self.maxAttempts = maxAttempts
+            self.requestChecksumCalculation = try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation)
+            self.responseChecksumValidation = try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation)
+            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
+            self.region = try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region)
+            self.signingRegion = try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region)
+            self.endpointResolver = try endpointResolver ?? DefaultEndpointResolver()
+            self.telemetryProvider = telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider
+            self.retryStrategyOptions = try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts)
+            self.clientLogMode = clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode()
+            self.endpoint = endpoint
+            self.idempotencyTokenGenerator = idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator()
+            self.httpClientEngine = httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration)
+            self.httpClientConfiguration = httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration()
+            self.authSchemes = authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()]
+            self.authSchemePreference = authSchemePreference ?? nil
+            self.authSchemeResolver = authSchemeResolver ?? DefaultCloudWatchLogsAuthSchemeResolver()
+            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: ""))
+            self._interceptorProviders = (interceptorProviders ?? []).map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            self._httpInterceptorProviders = (httpInterceptorProviders ?? []).map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            self.logger = (telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider).loggerProvider.getLogger(name: CloudWatchLogsClient.clientName)
+        }
+
+        public convenience init() async throws {
             try await self.init(
                 useFIPS: nil,
                 useDualStack: nil,
@@ -316,32 +529,32 @@ extension CloudWatchLogsClient {
         }
 
         public convenience init(region: Swift.String) throws {
-            self.init(
-                nil,
-                nil,
-                try AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
-                AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
-                try AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
-                nil,
-                try AWSClientConfigDefaultsProvider.requestChecksumCalculation(),
-                try AWSClientConfigDefaultsProvider.responseChecksumValidation(),
-                nil,
-                region,
-                region,
-                try DefaultEndpointResolver(),
-                ClientRuntime.DefaultTelemetry.provider,
-                try AWSClientConfigDefaultsProvider.retryStrategyOptions(),
-                AWSClientConfigDefaultsProvider.clientLogMode(),
-                nil,
-                AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
-                AWSClientConfigDefaultsProvider.httpClientEngine(),
-                AWSClientConfigDefaultsProvider.httpClientConfiguration(),
-                [AWSSDKHTTPAuth.SigV4AuthScheme()],
-                nil,
-                DefaultCloudWatchLogsAuthSchemeResolver(),
-                SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
-                [],
-                []
+            try self.init(
+                useFIPS: nil,
+                useDualStack: nil,
+                appID: try AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
+                awsCredentialIdentityResolver: AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
+                awsRetryMode: try AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
+                maxAttempts: nil,
+                requestChecksumCalculation: try AWSClientConfigDefaultsProvider.requestChecksumCalculation(),
+                responseChecksumValidation: try AWSClientConfigDefaultsProvider.responseChecksumValidation(),
+                ignoreConfiguredEndpointURLs: nil,
+                region: region,
+                signingRegion: region,
+                endpointResolver: try DefaultEndpointResolver(),
+                telemetryProvider: ClientRuntime.DefaultTelemetry.provider,
+                retryStrategyOptions: try AWSClientConfigDefaultsProvider.retryStrategyOptions(),
+                clientLogMode: AWSClientConfigDefaultsProvider.clientLogMode(),
+                endpoint: nil,
+                idempotencyTokenGenerator: AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
+                httpClientEngine: AWSClientConfigDefaultsProvider.httpClientEngine(),
+                httpClientConfiguration: AWSClientConfigDefaultsProvider.httpClientConfiguration(),
+                authSchemes: [AWSSDKHTTPAuth.SigV4AuthScheme()],
+                authSchemePreference: nil,
+                authSchemeResolver: DefaultCloudWatchLogsAuthSchemeResolver(),
+                bearerTokenIdentityResolver: SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
+                interceptorProviders: [],
+                httpInterceptorProviders: []
             )
         }
 
@@ -349,12 +562,42 @@ extension CloudWatchLogsClient {
             return "\(CloudWatchLogsClient.clientName) - \(region ?? "")"
         }
 
+        public func toSendable() throws -> CloudWatchLogsClientConfig {
+            return try CloudWatchLogsClientConfig(
+                useFIPS: self.useFIPS,
+                useDualStack: self.useDualStack,
+                appID: self.appID,
+                awsCredentialIdentityResolver: self.awsCredentialIdentityResolver,
+                awsRetryMode: self.awsRetryMode,
+                maxAttempts: self.maxAttempts,
+                requestChecksumCalculation: self.requestChecksumCalculation,
+                responseChecksumValidation: self.responseChecksumValidation,
+                ignoreConfiguredEndpointURLs: self.ignoreConfiguredEndpointURLs,
+                region: self.region,
+                signingRegion: self.signingRegion,
+                endpointResolver: self.endpointResolver,
+                telemetryProvider: self.telemetryProvider,
+                retryStrategyOptions: self.retryStrategyOptions,
+                clientLogMode: self.clientLogMode,
+                endpoint: self.endpoint,
+                idempotencyTokenGenerator: self.idempotencyTokenGenerator,
+                httpClientEngine: self.httpClientEngine,
+                httpClientConfiguration: self.httpClientConfiguration,
+                authSchemes: self.authSchemes,
+                authSchemePreference: self.authSchemePreference,
+                authSchemeResolver: self.authSchemeResolver,
+                bearerTokenIdentityResolver: self.bearerTokenIdentityResolver,
+                interceptorProviders: self.interceptorProviders,
+                httpInterceptorProviders: self.httpInterceptorProviders
+            )
+        }
+
         public func addInterceptorProvider(_ provider: ClientRuntime.InterceptorProvider) {
-            self.interceptorProviders.append(provider)
+            self._interceptorProviders.append(ClientRuntime.SendableInterceptorProviderBox(provider))
         }
 
         public func addInterceptorProvider(_ provider: ClientRuntime.HttpInterceptorProvider) {
-            self.httpInterceptorProviders.append(provider)
+            self._httpInterceptorProviders.append(ClientRuntime.SendableHttpInterceptorProviderBox(provider))
         }
 
     }
@@ -426,7 +669,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<AssociateKmsKeyOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<AssociateKmsKeyInput, AssociateKmsKeyOutput>(xAmzTarget: "Logs_20140328.AssociateKmsKey"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<AssociateKmsKeyInput, AssociateKmsKeyOutput>(overrides: ["X-Amz-Target": "Logs_20140328.AssociateKmsKey"]))
         builder.serialize(ClientRuntime.BodyMiddleware<AssociateKmsKeyInput, AssociateKmsKeyOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: AssociateKmsKeyInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<AssociateKmsKeyInput, AssociateKmsKeyOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<AssociateKmsKeyOutput>())
@@ -499,7 +742,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<AssociateSourceToS3TableIntegrationOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<AssociateSourceToS3TableIntegrationInput, AssociateSourceToS3TableIntegrationOutput>(xAmzTarget: "Logs_20140328.AssociateSourceToS3TableIntegration"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<AssociateSourceToS3TableIntegrationInput, AssociateSourceToS3TableIntegrationOutput>(overrides: ["X-Amz-Target": "Logs_20140328.AssociateSourceToS3TableIntegration"]))
         builder.serialize(ClientRuntime.BodyMiddleware<AssociateSourceToS3TableIntegrationInput, AssociateSourceToS3TableIntegrationOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: AssociateSourceToS3TableIntegrationInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<AssociateSourceToS3TableIntegrationInput, AssociateSourceToS3TableIntegrationOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<AssociateSourceToS3TableIntegrationOutput>())
@@ -571,7 +814,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CancelExportTaskOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CancelExportTaskInput, CancelExportTaskOutput>(xAmzTarget: "Logs_20140328.CancelExportTask"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CancelExportTaskInput, CancelExportTaskOutput>(overrides: ["X-Amz-Target": "Logs_20140328.CancelExportTask"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CancelExportTaskInput, CancelExportTaskOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CancelExportTaskInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CancelExportTaskInput, CancelExportTaskOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CancelExportTaskOutput>())
@@ -644,7 +887,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CancelImportTaskOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CancelImportTaskInput, CancelImportTaskOutput>(xAmzTarget: "Logs_20140328.CancelImportTask"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CancelImportTaskInput, CancelImportTaskOutput>(overrides: ["X-Amz-Target": "Logs_20140328.CancelImportTask"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CancelImportTaskInput, CancelImportTaskOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CancelImportTaskInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CancelImportTaskInput, CancelImportTaskOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CancelImportTaskOutput>())
@@ -730,7 +973,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateDeliveryOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateDeliveryInput, CreateDeliveryOutput>(xAmzTarget: "Logs_20140328.CreateDelivery"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateDeliveryInput, CreateDeliveryOutput>(overrides: ["X-Amz-Target": "Logs_20140328.CreateDelivery"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateDeliveryInput, CreateDeliveryOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateDeliveryInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateDeliveryInput, CreateDeliveryOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateDeliveryOutput>())
@@ -804,7 +1047,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateExportTaskOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateExportTaskInput, CreateExportTaskOutput>(xAmzTarget: "Logs_20140328.CreateExportTask"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateExportTaskInput, CreateExportTaskOutput>(overrides: ["X-Amz-Target": "Logs_20140328.CreateExportTask"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateExportTaskInput, CreateExportTaskOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateExportTaskInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateExportTaskInput, CreateExportTaskOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateExportTaskOutput>())
@@ -844,9 +1087,9 @@ extension CloudWatchLogsClient {
     ///
     /// * logs:PutResourcePolicy
     ///
-    /// * (If source has an associated AWS KMS Key) kms:Decrypt
+    /// * (If source has an associated Amazon Web Services KMS Key) kms:Decrypt
     ///
-    /// * (If source has an associated AWS KMS Key) kms:GenerateDataKey
+    /// * (If source has an associated Amazon Web Services KMS Key) kms:GenerateDataKey
     ///
     ///
     /// Example IAM policy for provided import role: [ { "Effect": "Allow", "Action": "iam:PassRole", "Resource": "arn:aws:iam::123456789012:role/apiCallerCredentials", "Condition": { "StringLike": { "iam:AssociatedResourceARN": "arn:aws:logs:us-east-1:123456789012:log-group:aws/cloudtrail/f1d45bff-d0e3-4868-b5d9-2eb678aa32fb:*" } } }, { "Effect": "Allow", "Action": [ "cloudtrail:GetEventDataStoreData" ], "Resource": [ "arn:aws:cloudtrail:us-east-1:123456789012:eventdatastore/f1d45bff-d0e3-4868-b5d9-2eb678aa32fb" ] }, { "Effect": "Allow", "Action": [ "logs:CreateImportTask", "logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutResourcePolicy" ], "Resource": [ "arn:aws:logs:us-east-1:123456789012:log-group:/aws/cloudtrail/*" ] }, { "Effect": "Allow", "Action": [ "kms:Decrypt", "kms:GenerateDataKey" ], "Resource": [ "arn:aws:kms:us-east-1:123456789012:key/12345678-1234-1234-1234-123456789012" ] } ]
@@ -908,7 +1151,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateImportTaskOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateImportTaskInput, CreateImportTaskOutput>(xAmzTarget: "Logs_20140328.CreateImportTask"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateImportTaskInput, CreateImportTaskOutput>(overrides: ["X-Amz-Target": "Logs_20140328.CreateImportTask"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateImportTaskInput, CreateImportTaskOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateImportTaskInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateImportTaskInput, CreateImportTaskOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateImportTaskOutput>())
@@ -981,7 +1224,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateLogAnomalyDetectorOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateLogAnomalyDetectorInput, CreateLogAnomalyDetectorOutput>(xAmzTarget: "Logs_20140328.CreateLogAnomalyDetector"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateLogAnomalyDetectorInput, CreateLogAnomalyDetectorOutput>(overrides: ["X-Amz-Target": "Logs_20140328.CreateLogAnomalyDetector"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateLogAnomalyDetectorInput, CreateLogAnomalyDetectorOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateLogAnomalyDetectorInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateLogAnomalyDetectorInput, CreateLogAnomalyDetectorOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateLogAnomalyDetectorOutput>())
@@ -1065,7 +1308,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateLogGroupOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateLogGroupInput, CreateLogGroupOutput>(xAmzTarget: "Logs_20140328.CreateLogGroup"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateLogGroupInput, CreateLogGroupOutput>(overrides: ["X-Amz-Target": "Logs_20140328.CreateLogGroup"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateLogGroupInput, CreateLogGroupOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateLogGroupInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateLogGroupInput, CreateLogGroupOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateLogGroupOutput>())
@@ -1143,7 +1386,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateLogStreamOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateLogStreamInput, CreateLogStreamOutput>(xAmzTarget: "Logs_20140328.CreateLogStream"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateLogStreamInput, CreateLogStreamOutput>(overrides: ["X-Amz-Target": "Logs_20140328.CreateLogStream"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateLogStreamInput, CreateLogStreamOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateLogStreamInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateLogStreamInput, CreateLogStreamOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateLogStreamOutput>())
@@ -1218,7 +1461,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateScheduledQueryOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateScheduledQueryInput, CreateScheduledQueryOutput>(xAmzTarget: "Logs_20140328.CreateScheduledQuery"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateScheduledQueryInput, CreateScheduledQueryOutput>(overrides: ["X-Amz-Target": "Logs_20140328.CreateScheduledQuery"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateScheduledQueryInput, CreateScheduledQueryOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateScheduledQueryInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateScheduledQueryInput, CreateScheduledQueryOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateScheduledQueryOutput>())
@@ -1301,7 +1544,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteAccountPolicyOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteAccountPolicyInput, DeleteAccountPolicyOutput>(xAmzTarget: "Logs_20140328.DeleteAccountPolicy"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteAccountPolicyInput, DeleteAccountPolicyOutput>(overrides: ["X-Amz-Target": "Logs_20140328.DeleteAccountPolicy"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteAccountPolicyInput, DeleteAccountPolicyOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteAccountPolicyInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteAccountPolicyInput, DeleteAccountPolicyOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteAccountPolicyOutput>())
@@ -1373,7 +1616,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteDataProtectionPolicyOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteDataProtectionPolicyInput, DeleteDataProtectionPolicyOutput>(xAmzTarget: "Logs_20140328.DeleteDataProtectionPolicy"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteDataProtectionPolicyInput, DeleteDataProtectionPolicyOutput>(overrides: ["X-Amz-Target": "Logs_20140328.DeleteDataProtectionPolicy"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteDataProtectionPolicyInput, DeleteDataProtectionPolicyOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteDataProtectionPolicyInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteDataProtectionPolicyInput, DeleteDataProtectionPolicyOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteDataProtectionPolicyOutput>())
@@ -1447,7 +1690,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteDeliveryOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteDeliveryInput, DeleteDeliveryOutput>(xAmzTarget: "Logs_20140328.DeleteDelivery"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteDeliveryInput, DeleteDeliveryOutput>(overrides: ["X-Amz-Target": "Logs_20140328.DeleteDelivery"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteDeliveryInput, DeleteDeliveryOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteDeliveryInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteDeliveryInput, DeleteDeliveryOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteDeliveryOutput>())
@@ -1521,7 +1764,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteDeliveryDestinationOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteDeliveryDestinationInput, DeleteDeliveryDestinationOutput>(xAmzTarget: "Logs_20140328.DeleteDeliveryDestination"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteDeliveryDestinationInput, DeleteDeliveryDestinationOutput>(overrides: ["X-Amz-Target": "Logs_20140328.DeleteDeliveryDestination"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteDeliveryDestinationInput, DeleteDeliveryDestinationOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteDeliveryDestinationInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteDeliveryDestinationInput, DeleteDeliveryDestinationOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteDeliveryDestinationOutput>())
@@ -1593,7 +1836,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteDeliveryDestinationPolicyOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteDeliveryDestinationPolicyInput, DeleteDeliveryDestinationPolicyOutput>(xAmzTarget: "Logs_20140328.DeleteDeliveryDestinationPolicy"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteDeliveryDestinationPolicyInput, DeleteDeliveryDestinationPolicyOutput>(overrides: ["X-Amz-Target": "Logs_20140328.DeleteDeliveryDestinationPolicy"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteDeliveryDestinationPolicyInput, DeleteDeliveryDestinationPolicyOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteDeliveryDestinationPolicyInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteDeliveryDestinationPolicyInput, DeleteDeliveryDestinationPolicyOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteDeliveryDestinationPolicyOutput>())
@@ -1667,7 +1910,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteDeliverySourceOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteDeliverySourceInput, DeleteDeliverySourceOutput>(xAmzTarget: "Logs_20140328.DeleteDeliverySource"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteDeliverySourceInput, DeleteDeliverySourceOutput>(overrides: ["X-Amz-Target": "Logs_20140328.DeleteDeliverySource"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteDeliverySourceInput, DeleteDeliverySourceOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteDeliverySourceInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteDeliverySourceInput, DeleteDeliverySourceOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteDeliverySourceOutput>())
@@ -1739,7 +1982,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteDestinationOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteDestinationInput, DeleteDestinationOutput>(xAmzTarget: "Logs_20140328.DeleteDestination"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteDestinationInput, DeleteDestinationOutput>(overrides: ["X-Amz-Target": "Logs_20140328.DeleteDestination"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteDestinationInput, DeleteDestinationOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteDestinationInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteDestinationInput, DeleteDestinationOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteDestinationOutput>())
@@ -1812,7 +2055,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteIndexPolicyOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteIndexPolicyInput, DeleteIndexPolicyOutput>(xAmzTarget: "Logs_20140328.DeleteIndexPolicy"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteIndexPolicyInput, DeleteIndexPolicyOutput>(overrides: ["X-Amz-Target": "Logs_20140328.DeleteIndexPolicy"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteIndexPolicyInput, DeleteIndexPolicyOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteIndexPolicyInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteIndexPolicyInput, DeleteIndexPolicyOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteIndexPolicyOutput>())
@@ -1884,7 +2127,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteIntegrationOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteIntegrationInput, DeleteIntegrationOutput>(xAmzTarget: "Logs_20140328.DeleteIntegration"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteIntegrationInput, DeleteIntegrationOutput>(overrides: ["X-Amz-Target": "Logs_20140328.DeleteIntegration"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteIntegrationInput, DeleteIntegrationOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteIntegrationInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteIntegrationInput, DeleteIntegrationOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteIntegrationOutput>())
@@ -1956,7 +2199,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteLogAnomalyDetectorOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteLogAnomalyDetectorInput, DeleteLogAnomalyDetectorOutput>(xAmzTarget: "Logs_20140328.DeleteLogAnomalyDetector"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteLogAnomalyDetectorInput, DeleteLogAnomalyDetectorOutput>(overrides: ["X-Amz-Target": "Logs_20140328.DeleteLogAnomalyDetector"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteLogAnomalyDetectorInput, DeleteLogAnomalyDetectorOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteLogAnomalyDetectorInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteLogAnomalyDetectorInput, DeleteLogAnomalyDetectorOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteLogAnomalyDetectorOutput>())
@@ -2029,7 +2272,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteLogGroupOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteLogGroupInput, DeleteLogGroupOutput>(xAmzTarget: "Logs_20140328.DeleteLogGroup"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteLogGroupInput, DeleteLogGroupOutput>(overrides: ["X-Amz-Target": "Logs_20140328.DeleteLogGroup"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteLogGroupInput, DeleteLogGroupOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteLogGroupInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteLogGroupInput, DeleteLogGroupOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteLogGroupOutput>())
@@ -2102,7 +2345,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteLogStreamOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteLogStreamInput, DeleteLogStreamOutput>(xAmzTarget: "Logs_20140328.DeleteLogStream"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteLogStreamInput, DeleteLogStreamOutput>(overrides: ["X-Amz-Target": "Logs_20140328.DeleteLogStream"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteLogStreamInput, DeleteLogStreamOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteLogStreamInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteLogStreamInput, DeleteLogStreamOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteLogStreamOutput>())
@@ -2174,7 +2417,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteMetricFilterOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteMetricFilterInput, DeleteMetricFilterOutput>(xAmzTarget: "Logs_20140328.DeleteMetricFilter"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteMetricFilterInput, DeleteMetricFilterOutput>(overrides: ["X-Amz-Target": "Logs_20140328.DeleteMetricFilter"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteMetricFilterInput, DeleteMetricFilterOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteMetricFilterInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteMetricFilterInput, DeleteMetricFilterOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteMetricFilterOutput>())
@@ -2245,7 +2488,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteQueryDefinitionOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteQueryDefinitionInput, DeleteQueryDefinitionOutput>(xAmzTarget: "Logs_20140328.DeleteQueryDefinition"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteQueryDefinitionInput, DeleteQueryDefinitionOutput>(overrides: ["X-Amz-Target": "Logs_20140328.DeleteQueryDefinition"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteQueryDefinitionInput, DeleteQueryDefinitionOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteQueryDefinitionInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteQueryDefinitionInput, DeleteQueryDefinitionOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteQueryDefinitionOutput>())
@@ -2317,7 +2560,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteResourcePolicyOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteResourcePolicyInput, DeleteResourcePolicyOutput>(xAmzTarget: "Logs_20140328.DeleteResourcePolicy"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteResourcePolicyInput, DeleteResourcePolicyOutput>(overrides: ["X-Amz-Target": "Logs_20140328.DeleteResourcePolicy"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteResourcePolicyInput, DeleteResourcePolicyOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteResourcePolicyInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteResourcePolicyInput, DeleteResourcePolicyOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteResourcePolicyOutput>())
@@ -2389,7 +2632,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteRetentionPolicyOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteRetentionPolicyInput, DeleteRetentionPolicyOutput>(xAmzTarget: "Logs_20140328.DeleteRetentionPolicy"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteRetentionPolicyInput, DeleteRetentionPolicyOutput>(overrides: ["X-Amz-Target": "Logs_20140328.DeleteRetentionPolicy"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteRetentionPolicyInput, DeleteRetentionPolicyOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteRetentionPolicyInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteRetentionPolicyInput, DeleteRetentionPolicyOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteRetentionPolicyOutput>())
@@ -2462,7 +2705,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteScheduledQueryOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteScheduledQueryInput, DeleteScheduledQueryOutput>(xAmzTarget: "Logs_20140328.DeleteScheduledQuery"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteScheduledQueryInput, DeleteScheduledQueryOutput>(overrides: ["X-Amz-Target": "Logs_20140328.DeleteScheduledQuery"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteScheduledQueryInput, DeleteScheduledQueryOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteScheduledQueryInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteScheduledQueryInput, DeleteScheduledQueryOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteScheduledQueryOutput>())
@@ -2534,7 +2777,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteSubscriptionFilterOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteSubscriptionFilterInput, DeleteSubscriptionFilterOutput>(xAmzTarget: "Logs_20140328.DeleteSubscriptionFilter"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteSubscriptionFilterInput, DeleteSubscriptionFilterOutput>(overrides: ["X-Amz-Target": "Logs_20140328.DeleteSubscriptionFilter"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteSubscriptionFilterInput, DeleteSubscriptionFilterOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteSubscriptionFilterInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteSubscriptionFilterInput, DeleteSubscriptionFilterOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteSubscriptionFilterOutput>())
@@ -2607,7 +2850,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteTransformerOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteTransformerInput, DeleteTransformerOutput>(xAmzTarget: "Logs_20140328.DeleteTransformer"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteTransformerInput, DeleteTransformerOutput>(overrides: ["X-Amz-Target": "Logs_20140328.DeleteTransformer"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteTransformerInput, DeleteTransformerOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteTransformerInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteTransformerInput, DeleteTransformerOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteTransformerOutput>())
@@ -2687,7 +2930,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeAccountPoliciesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeAccountPoliciesInput, DescribeAccountPoliciesOutput>(xAmzTarget: "Logs_20140328.DescribeAccountPolicies"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeAccountPoliciesInput, DescribeAccountPoliciesOutput>(overrides: ["X-Amz-Target": "Logs_20140328.DescribeAccountPolicies"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeAccountPoliciesInput, DescribeAccountPoliciesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeAccountPoliciesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeAccountPoliciesInput, DescribeAccountPoliciesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeAccountPoliciesOutput>())
@@ -2759,7 +3002,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeConfigurationTemplatesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeConfigurationTemplatesInput, DescribeConfigurationTemplatesOutput>(xAmzTarget: "Logs_20140328.DescribeConfigurationTemplates"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeConfigurationTemplatesInput, DescribeConfigurationTemplatesOutput>(overrides: ["X-Amz-Target": "Logs_20140328.DescribeConfigurationTemplates"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeConfigurationTemplatesInput, DescribeConfigurationTemplatesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeConfigurationTemplatesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeConfigurationTemplatesInput, DescribeConfigurationTemplatesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeConfigurationTemplatesOutput>())
@@ -2831,7 +3074,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeDeliveriesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeDeliveriesInput, DescribeDeliveriesOutput>(xAmzTarget: "Logs_20140328.DescribeDeliveries"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeDeliveriesInput, DescribeDeliveriesOutput>(overrides: ["X-Amz-Target": "Logs_20140328.DescribeDeliveries"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeDeliveriesInput, DescribeDeliveriesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeDeliveriesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeDeliveriesInput, DescribeDeliveriesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeDeliveriesOutput>())
@@ -2903,7 +3146,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeDeliveryDestinationsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeDeliveryDestinationsInput, DescribeDeliveryDestinationsOutput>(xAmzTarget: "Logs_20140328.DescribeDeliveryDestinations"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeDeliveryDestinationsInput, DescribeDeliveryDestinationsOutput>(overrides: ["X-Amz-Target": "Logs_20140328.DescribeDeliveryDestinations"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeDeliveryDestinationsInput, DescribeDeliveryDestinationsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeDeliveryDestinationsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeDeliveryDestinationsInput, DescribeDeliveryDestinationsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeDeliveryDestinationsOutput>())
@@ -2975,7 +3218,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeDeliverySourcesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeDeliverySourcesInput, DescribeDeliverySourcesOutput>(xAmzTarget: "Logs_20140328.DescribeDeliverySources"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeDeliverySourcesInput, DescribeDeliverySourcesOutput>(overrides: ["X-Amz-Target": "Logs_20140328.DescribeDeliverySources"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeDeliverySourcesInput, DescribeDeliverySourcesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeDeliverySourcesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeDeliverySourcesInput, DescribeDeliverySourcesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeDeliverySourcesOutput>())
@@ -3045,7 +3288,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeDestinationsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeDestinationsInput, DescribeDestinationsOutput>(xAmzTarget: "Logs_20140328.DescribeDestinations"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeDestinationsInput, DescribeDestinationsOutput>(overrides: ["X-Amz-Target": "Logs_20140328.DescribeDestinations"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeDestinationsInput, DescribeDestinationsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeDestinationsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeDestinationsInput, DescribeDestinationsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeDestinationsOutput>())
@@ -3115,7 +3358,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeExportTasksOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeExportTasksInput, DescribeExportTasksOutput>(xAmzTarget: "Logs_20140328.DescribeExportTasks"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeExportTasksInput, DescribeExportTasksOutput>(overrides: ["X-Amz-Target": "Logs_20140328.DescribeExportTasks"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeExportTasksInput, DescribeExportTasksOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeExportTasksInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeExportTasksInput, DescribeExportTasksOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeExportTasksOutput>())
@@ -3188,7 +3431,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeFieldIndexesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeFieldIndexesInput, DescribeFieldIndexesOutput>(xAmzTarget: "Logs_20140328.DescribeFieldIndexes"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeFieldIndexesInput, DescribeFieldIndexesOutput>(overrides: ["X-Amz-Target": "Logs_20140328.DescribeFieldIndexes"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeFieldIndexesInput, DescribeFieldIndexesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeFieldIndexesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeFieldIndexesInput, DescribeFieldIndexesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeFieldIndexesOutput>())
@@ -3261,7 +3504,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeImportTaskBatchesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeImportTaskBatchesInput, DescribeImportTaskBatchesOutput>(xAmzTarget: "Logs_20140328.DescribeImportTaskBatches"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeImportTaskBatchesInput, DescribeImportTaskBatchesOutput>(overrides: ["X-Amz-Target": "Logs_20140328.DescribeImportTaskBatches"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeImportTaskBatchesInput, DescribeImportTaskBatchesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeImportTaskBatchesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeImportTaskBatchesInput, DescribeImportTaskBatchesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeImportTaskBatchesOutput>())
@@ -3334,7 +3577,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeImportTasksOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeImportTasksInput, DescribeImportTasksOutput>(xAmzTarget: "Logs_20140328.DescribeImportTasks"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeImportTasksInput, DescribeImportTasksOutput>(overrides: ["X-Amz-Target": "Logs_20140328.DescribeImportTasks"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeImportTasksInput, DescribeImportTasksOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeImportTasksInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeImportTasksInput, DescribeImportTasksOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeImportTasksOutput>())
@@ -3407,7 +3650,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeIndexPoliciesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeIndexPoliciesInput, DescribeIndexPoliciesOutput>(xAmzTarget: "Logs_20140328.DescribeIndexPolicies"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeIndexPoliciesInput, DescribeIndexPoliciesOutput>(overrides: ["X-Amz-Target": "Logs_20140328.DescribeIndexPolicies"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeIndexPoliciesInput, DescribeIndexPoliciesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeIndexPoliciesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeIndexPoliciesInput, DescribeIndexPoliciesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeIndexPoliciesOutput>())
@@ -3477,7 +3720,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeLogGroupsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeLogGroupsInput, DescribeLogGroupsOutput>(xAmzTarget: "Logs_20140328.DescribeLogGroups"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeLogGroupsInput, DescribeLogGroupsOutput>(overrides: ["X-Amz-Target": "Logs_20140328.DescribeLogGroups"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeLogGroupsInput, DescribeLogGroupsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeLogGroupsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeLogGroupsInput, DescribeLogGroupsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeLogGroupsOutput>())
@@ -3548,7 +3791,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeLogStreamsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeLogStreamsInput, DescribeLogStreamsOutput>(xAmzTarget: "Logs_20140328.DescribeLogStreams"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeLogStreamsInput, DescribeLogStreamsOutput>(overrides: ["X-Amz-Target": "Logs_20140328.DescribeLogStreams"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeLogStreamsInput, DescribeLogStreamsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeLogStreamsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeLogStreamsInput, DescribeLogStreamsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeLogStreamsOutput>())
@@ -3619,7 +3862,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeMetricFiltersOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeMetricFiltersInput, DescribeMetricFiltersOutput>(xAmzTarget: "Logs_20140328.DescribeMetricFilters"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeMetricFiltersInput, DescribeMetricFiltersOutput>(overrides: ["X-Amz-Target": "Logs_20140328.DescribeMetricFilters"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeMetricFiltersInput, DescribeMetricFiltersOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeMetricFiltersInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeMetricFiltersInput, DescribeMetricFiltersOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeMetricFiltersOutput>())
@@ -3690,7 +3933,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeQueriesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeQueriesInput, DescribeQueriesOutput>(xAmzTarget: "Logs_20140328.DescribeQueries"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeQueriesInput, DescribeQueriesOutput>(overrides: ["X-Amz-Target": "Logs_20140328.DescribeQueries"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeQueriesInput, DescribeQueriesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeQueriesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeQueriesInput, DescribeQueriesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeQueriesOutput>())
@@ -3760,7 +4003,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeQueryDefinitionsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeQueryDefinitionsInput, DescribeQueryDefinitionsOutput>(xAmzTarget: "Logs_20140328.DescribeQueryDefinitions"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeQueryDefinitionsInput, DescribeQueryDefinitionsOutput>(overrides: ["X-Amz-Target": "Logs_20140328.DescribeQueryDefinitions"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeQueryDefinitionsInput, DescribeQueryDefinitionsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeQueryDefinitionsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeQueryDefinitionsInput, DescribeQueryDefinitionsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeQueryDefinitionsOutput>())
@@ -3830,7 +4073,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeResourcePoliciesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeResourcePoliciesInput, DescribeResourcePoliciesOutput>(xAmzTarget: "Logs_20140328.DescribeResourcePolicies"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeResourcePoliciesInput, DescribeResourcePoliciesOutput>(overrides: ["X-Amz-Target": "Logs_20140328.DescribeResourcePolicies"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeResourcePoliciesInput, DescribeResourcePoliciesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeResourcePoliciesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeResourcePoliciesInput, DescribeResourcePoliciesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeResourcePoliciesOutput>())
@@ -3901,7 +4144,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeSubscriptionFiltersOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeSubscriptionFiltersInput, DescribeSubscriptionFiltersOutput>(xAmzTarget: "Logs_20140328.DescribeSubscriptionFilters"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeSubscriptionFiltersInput, DescribeSubscriptionFiltersOutput>(overrides: ["X-Amz-Target": "Logs_20140328.DescribeSubscriptionFilters"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeSubscriptionFiltersInput, DescribeSubscriptionFiltersOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeSubscriptionFiltersInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeSubscriptionFiltersInput, DescribeSubscriptionFiltersOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeSubscriptionFiltersOutput>())
@@ -3980,7 +4223,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DisassociateKmsKeyOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DisassociateKmsKeyInput, DisassociateKmsKeyOutput>(xAmzTarget: "Logs_20140328.DisassociateKmsKey"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DisassociateKmsKeyInput, DisassociateKmsKeyOutput>(overrides: ["X-Amz-Target": "Logs_20140328.DisassociateKmsKey"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DisassociateKmsKeyInput, DisassociateKmsKeyOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DisassociateKmsKeyInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DisassociateKmsKeyInput, DisassociateKmsKeyOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DisassociateKmsKeyOutput>())
@@ -4053,7 +4296,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DisassociateSourceFromS3TableIntegrationOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DisassociateSourceFromS3TableIntegrationInput, DisassociateSourceFromS3TableIntegrationOutput>(xAmzTarget: "Logs_20140328.DisassociateSourceFromS3TableIntegration"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DisassociateSourceFromS3TableIntegrationInput, DisassociateSourceFromS3TableIntegrationOutput>(overrides: ["X-Amz-Target": "Logs_20140328.DisassociateSourceFromS3TableIntegration"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DisassociateSourceFromS3TableIntegrationInput, DisassociateSourceFromS3TableIntegrationOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DisassociateSourceFromS3TableIntegrationInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DisassociateSourceFromS3TableIntegrationInput, DisassociateSourceFromS3TableIntegrationOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DisassociateSourceFromS3TableIntegrationOutput>())
@@ -4133,7 +4376,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<FilterLogEventsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<FilterLogEventsInput, FilterLogEventsOutput>(xAmzTarget: "Logs_20140328.FilterLogEvents"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<FilterLogEventsInput, FilterLogEventsOutput>(overrides: ["X-Amz-Target": "Logs_20140328.FilterLogEvents"]))
         builder.serialize(ClientRuntime.BodyMiddleware<FilterLogEventsInput, FilterLogEventsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: FilterLogEventsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<FilterLogEventsInput, FilterLogEventsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<FilterLogEventsOutput>())
@@ -4205,7 +4448,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetDataProtectionPolicyOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetDataProtectionPolicyInput, GetDataProtectionPolicyOutput>(xAmzTarget: "Logs_20140328.GetDataProtectionPolicy"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetDataProtectionPolicyInput, GetDataProtectionPolicyOutput>(overrides: ["X-Amz-Target": "Logs_20140328.GetDataProtectionPolicy"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetDataProtectionPolicyInput, GetDataProtectionPolicyOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetDataProtectionPolicyInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetDataProtectionPolicyInput, GetDataProtectionPolicyOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetDataProtectionPolicyOutput>())
@@ -4278,7 +4521,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetDeliveryOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetDeliveryInput, GetDeliveryOutput>(xAmzTarget: "Logs_20140328.GetDelivery"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetDeliveryInput, GetDeliveryOutput>(overrides: ["X-Amz-Target": "Logs_20140328.GetDelivery"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetDeliveryInput, GetDeliveryOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetDeliveryInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetDeliveryInput, GetDeliveryOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetDeliveryOutput>())
@@ -4351,7 +4594,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetDeliveryDestinationOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetDeliveryDestinationInput, GetDeliveryDestinationOutput>(xAmzTarget: "Logs_20140328.GetDeliveryDestination"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetDeliveryDestinationInput, GetDeliveryDestinationOutput>(overrides: ["X-Amz-Target": "Logs_20140328.GetDeliveryDestination"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetDeliveryDestinationInput, GetDeliveryDestinationOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetDeliveryDestinationInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetDeliveryDestinationInput, GetDeliveryDestinationOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetDeliveryDestinationOutput>())
@@ -4422,7 +4665,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetDeliveryDestinationPolicyOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetDeliveryDestinationPolicyInput, GetDeliveryDestinationPolicyOutput>(xAmzTarget: "Logs_20140328.GetDeliveryDestinationPolicy"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetDeliveryDestinationPolicyInput, GetDeliveryDestinationPolicyOutput>(overrides: ["X-Amz-Target": "Logs_20140328.GetDeliveryDestinationPolicy"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetDeliveryDestinationPolicyInput, GetDeliveryDestinationPolicyOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetDeliveryDestinationPolicyInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetDeliveryDestinationPolicyInput, GetDeliveryDestinationPolicyOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetDeliveryDestinationPolicyOutput>())
@@ -4495,7 +4738,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetDeliverySourceOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetDeliverySourceInput, GetDeliverySourceOutput>(xAmzTarget: "Logs_20140328.GetDeliverySource"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetDeliverySourceInput, GetDeliverySourceOutput>(overrides: ["X-Amz-Target": "Logs_20140328.GetDeliverySource"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetDeliverySourceInput, GetDeliverySourceOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetDeliverySourceInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetDeliverySourceInput, GetDeliverySourceOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetDeliverySourceOutput>())
@@ -4566,7 +4809,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetIntegrationOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetIntegrationInput, GetIntegrationOutput>(xAmzTarget: "Logs_20140328.GetIntegration"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetIntegrationInput, GetIntegrationOutput>(overrides: ["X-Amz-Target": "Logs_20140328.GetIntegration"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetIntegrationInput, GetIntegrationOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetIntegrationInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetIntegrationInput, GetIntegrationOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetIntegrationOutput>())
@@ -4638,7 +4881,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetLogAnomalyDetectorOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetLogAnomalyDetectorInput, GetLogAnomalyDetectorOutput>(xAmzTarget: "Logs_20140328.GetLogAnomalyDetector"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetLogAnomalyDetectorInput, GetLogAnomalyDetectorOutput>(overrides: ["X-Amz-Target": "Logs_20140328.GetLogAnomalyDetector"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetLogAnomalyDetectorInput, GetLogAnomalyDetectorOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetLogAnomalyDetectorInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetLogAnomalyDetectorInput, GetLogAnomalyDetectorOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetLogAnomalyDetectorOutput>())
@@ -4709,7 +4952,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetLogEventsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetLogEventsInput, GetLogEventsOutput>(xAmzTarget: "Logs_20140328.GetLogEvents"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetLogEventsInput, GetLogEventsOutput>(overrides: ["X-Amz-Target": "Logs_20140328.GetLogEvents"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetLogEventsInput, GetLogEventsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetLogEventsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetLogEventsInput, GetLogEventsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetLogEventsOutput>())
@@ -4781,7 +5024,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetLogFieldsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetLogFieldsInput, GetLogFieldsOutput>(xAmzTarget: "Logs_20140328.GetLogFields"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetLogFieldsInput, GetLogFieldsOutput>(overrides: ["X-Amz-Target": "Logs_20140328.GetLogFields"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetLogFieldsInput, GetLogFieldsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetLogFieldsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetLogFieldsInput, GetLogFieldsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetLogFieldsOutput>())
@@ -4853,7 +5096,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetLogGroupFieldsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetLogGroupFieldsInput, GetLogGroupFieldsOutput>(xAmzTarget: "Logs_20140328.GetLogGroupFields"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetLogGroupFieldsInput, GetLogGroupFieldsOutput>(overrides: ["X-Amz-Target": "Logs_20140328.GetLogGroupFields"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetLogGroupFieldsInput, GetLogGroupFieldsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetLogGroupFieldsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetLogGroupFieldsInput, GetLogGroupFieldsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetLogGroupFieldsOutput>())
@@ -4877,7 +5120,7 @@ extension CloudWatchLogsClient {
 
     /// Performs the `GetLogObject` operation on the `CloudWatchLogs` service.
     ///
-    /// Retrieves a large logging object (LLO) and streams it back. This API is used to fetch the content of large portions of log events that have been ingested through the PutOpenTelemetryLogs API. When log events contain fields that would cause the total event size to exceed 1MB, CloudWatch Logs automatically processes up to 10 fields, starting with the largest fields. Each field is truncated as needed to keep the total event size as close to 1MB as possible. The excess portions are stored as Large Log Objects (LLOs) and these fields are processed separately and LLO reference system fields (in the format @ptr.$[path.to.field]) are added. The path in the reference field reflects the original JSON structure where the large field was located. For example, this could be @ptr.$['input']['message'], @ptr.$['AAA']['BBB']['CCC']['DDD'], @ptr.$['AAA'], or any other path matching your log structure.
+    /// Retrieves a large logging object (LLO) and streams it back. This API is used to fetch the content of large portions of log events that have been ingested through the PutOpenTelemetryLogs API. When log events contain fields that would cause the total event size to exceed 1MB, CloudWatch Logs automatically processes up to 10 fields, starting with the largest fields. Each field is truncated as needed to keep the total event size as close to 1MB as possible. The excess portions are stored as Large Log Objects (LLOs) and these fields are processed separately and LLO reference system fields (in the format @ptr.$[path.to.field]) are added. The path in the reference field reflects the original JSON structure where the large field was located. For example, this could be @ptr.$['input']['message'], @ptr.$['AAA']['BBB']['CCC']['DDD'], @ptr.$['AAA'], or any other path matching your log structure. The GetLogObject API routes requests using SDK host prefix injection. SDK versions released before April 1, 2026 route to streaming-logs.Region.amazonaws.com, which does not support VPC endpoints. SDK versions released on or after April 1, 2026 route to stream-logs.Region.amazonaws.com, which supports VPC endpoints. To set up a VPC endpoint for this API, see [Creating a VPC endpoint for CloudWatch Logs ](https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/cloudwatch-logs-and-interface-VPC.html#create-VPC-endpoint-for-CloudWatchLogs).
     ///
     /// - Parameter input: The parameters for the GetLogObject operation. (Type: `GetLogObjectInput`)
     ///
@@ -4926,7 +5169,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetLogObjectOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetLogObjectInput, GetLogObjectOutput>(xAmzTarget: "Logs_20140328.GetLogObject"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetLogObjectInput, GetLogObjectOutput>(overrides: ["X-Amz-Target": "Logs_20140328.GetLogObject"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetLogObjectInput, GetLogObjectOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetLogObjectInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetLogObjectInput, GetLogObjectOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetLogObjectOutput>())
@@ -4998,7 +5241,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetLogRecordOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetLogRecordInput, GetLogRecordOutput>(xAmzTarget: "Logs_20140328.GetLogRecord"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetLogRecordInput, GetLogRecordOutput>(overrides: ["X-Amz-Target": "Logs_20140328.GetLogRecord"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetLogRecordInput, GetLogRecordOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetLogRecordInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetLogRecordInput, GetLogRecordOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetLogRecordOutput>())
@@ -5069,7 +5312,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetQueryResultsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetQueryResultsInput, GetQueryResultsOutput>(xAmzTarget: "Logs_20140328.GetQueryResults"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetQueryResultsInput, GetQueryResultsOutput>(overrides: ["X-Amz-Target": "Logs_20140328.GetQueryResults"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetQueryResultsInput, GetQueryResultsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetQueryResultsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetQueryResultsInput, GetQueryResultsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetQueryResultsOutput>())
@@ -5142,7 +5385,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetScheduledQueryOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetScheduledQueryInput, GetScheduledQueryOutput>(xAmzTarget: "Logs_20140328.GetScheduledQuery"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetScheduledQueryInput, GetScheduledQueryOutput>(overrides: ["X-Amz-Target": "Logs_20140328.GetScheduledQuery"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetScheduledQueryInput, GetScheduledQueryOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetScheduledQueryInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetScheduledQueryInput, GetScheduledQueryOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetScheduledQueryOutput>())
@@ -5215,7 +5458,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetScheduledQueryHistoryOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetScheduledQueryHistoryInput, GetScheduledQueryHistoryOutput>(xAmzTarget: "Logs_20140328.GetScheduledQueryHistory"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetScheduledQueryHistoryInput, GetScheduledQueryHistoryOutput>(overrides: ["X-Amz-Target": "Logs_20140328.GetScheduledQueryHistory"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetScheduledQueryHistoryInput, GetScheduledQueryHistoryOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetScheduledQueryHistoryInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetScheduledQueryHistoryInput, GetScheduledQueryHistoryOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetScheduledQueryHistoryOutput>())
@@ -5287,7 +5530,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetTransformerOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetTransformerInput, GetTransformerOutput>(xAmzTarget: "Logs_20140328.GetTransformer"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetTransformerInput, GetTransformerOutput>(overrides: ["X-Amz-Target": "Logs_20140328.GetTransformer"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetTransformerInput, GetTransformerOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetTransformerInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetTransformerInput, GetTransformerOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetTransformerOutput>())
@@ -5358,7 +5601,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListAggregateLogGroupSummariesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListAggregateLogGroupSummariesInput, ListAggregateLogGroupSummariesOutput>(xAmzTarget: "Logs_20140328.ListAggregateLogGroupSummaries"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListAggregateLogGroupSummariesInput, ListAggregateLogGroupSummariesOutput>(overrides: ["X-Amz-Target": "Logs_20140328.ListAggregateLogGroupSummaries"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListAggregateLogGroupSummariesInput, ListAggregateLogGroupSummariesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListAggregateLogGroupSummariesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListAggregateLogGroupSummariesInput, ListAggregateLogGroupSummariesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListAggregateLogGroupSummariesOutput>())
@@ -5430,7 +5673,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListAnomaliesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListAnomaliesInput, ListAnomaliesOutput>(xAmzTarget: "Logs_20140328.ListAnomalies"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListAnomaliesInput, ListAnomaliesOutput>(overrides: ["X-Amz-Target": "Logs_20140328.ListAnomalies"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListAnomaliesInput, ListAnomaliesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListAnomaliesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListAnomaliesInput, ListAnomaliesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListAnomaliesOutput>())
@@ -5500,7 +5743,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListIntegrationsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListIntegrationsInput, ListIntegrationsOutput>(xAmzTarget: "Logs_20140328.ListIntegrations"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListIntegrationsInput, ListIntegrationsOutput>(overrides: ["X-Amz-Target": "Logs_20140328.ListIntegrations"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListIntegrationsInput, ListIntegrationsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListIntegrationsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListIntegrationsInput, ListIntegrationsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListIntegrationsOutput>())
@@ -5572,7 +5815,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListLogAnomalyDetectorsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListLogAnomalyDetectorsInput, ListLogAnomalyDetectorsOutput>(xAmzTarget: "Logs_20140328.ListLogAnomalyDetectors"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListLogAnomalyDetectorsInput, ListLogAnomalyDetectorsOutput>(overrides: ["X-Amz-Target": "Logs_20140328.ListLogAnomalyDetectors"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListLogAnomalyDetectorsInput, ListLogAnomalyDetectorsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListLogAnomalyDetectorsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListLogAnomalyDetectorsInput, ListLogAnomalyDetectorsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListLogAnomalyDetectorsOutput>())
@@ -5642,7 +5885,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListLogGroupsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListLogGroupsInput, ListLogGroupsOutput>(xAmzTarget: "Logs_20140328.ListLogGroups"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListLogGroupsInput, ListLogGroupsOutput>(overrides: ["X-Amz-Target": "Logs_20140328.ListLogGroups"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListLogGroupsInput, ListLogGroupsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListLogGroupsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListLogGroupsInput, ListLogGroupsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListLogGroupsOutput>())
@@ -5714,7 +5957,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListLogGroupsForQueryOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListLogGroupsForQueryInput, ListLogGroupsForQueryOutput>(xAmzTarget: "Logs_20140328.ListLogGroupsForQuery"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListLogGroupsForQueryInput, ListLogGroupsForQueryOutput>(overrides: ["X-Amz-Target": "Logs_20140328.ListLogGroupsForQuery"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListLogGroupsForQueryInput, ListLogGroupsForQueryOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListLogGroupsForQueryInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListLogGroupsForQueryInput, ListLogGroupsForQueryOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListLogGroupsForQueryOutput>())
@@ -5786,7 +6029,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListScheduledQueriesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListScheduledQueriesInput, ListScheduledQueriesOutput>(xAmzTarget: "Logs_20140328.ListScheduledQueries"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListScheduledQueriesInput, ListScheduledQueriesOutput>(overrides: ["X-Amz-Target": "Logs_20140328.ListScheduledQueries"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListScheduledQueriesInput, ListScheduledQueriesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListScheduledQueriesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListScheduledQueriesInput, ListScheduledQueriesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListScheduledQueriesOutput>())
@@ -5859,7 +6102,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListSourcesForS3TableIntegrationOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListSourcesForS3TableIntegrationInput, ListSourcesForS3TableIntegrationOutput>(xAmzTarget: "Logs_20140328.ListSourcesForS3TableIntegration"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListSourcesForS3TableIntegrationInput, ListSourcesForS3TableIntegrationOutput>(overrides: ["X-Amz-Target": "Logs_20140328.ListSourcesForS3TableIntegration"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListSourcesForS3TableIntegrationInput, ListSourcesForS3TableIntegrationOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListSourcesForS3TableIntegrationInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListSourcesForS3TableIntegrationInput, ListSourcesForS3TableIntegrationOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListSourcesForS3TableIntegrationOutput>())
@@ -5930,7 +6173,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListTagsForResourceOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListTagsForResourceInput, ListTagsForResourceOutput>(xAmzTarget: "Logs_20140328.ListTagsForResource"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListTagsForResourceInput, ListTagsForResourceOutput>(overrides: ["X-Amz-Target": "Logs_20140328.ListTagsForResource"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListTagsForResourceInput, ListTagsForResourceOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListTagsForResourceInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListTagsForResourceInput, ListTagsForResourceOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListTagsForResourceOutput>())
@@ -6001,7 +6244,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListTagsLogGroupOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListTagsLogGroupInput, ListTagsLogGroupOutput>(xAmzTarget: "Logs_20140328.ListTagsLogGroup"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListTagsLogGroupInput, ListTagsLogGroupOutput>(overrides: ["X-Amz-Target": "Logs_20140328.ListTagsLogGroup"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListTagsLogGroupInput, ListTagsLogGroupOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListTagsLogGroupInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListTagsLogGroupInput, ListTagsLogGroupOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListTagsLogGroupOutput>())
@@ -6130,7 +6373,7 @@ extension CloudWatchLogsClient {
     /// * requestId
     ///
     ///
-    /// Default field indexes are in addition to any custom field indexes you define within your policy. Default field indexes are not counted towards your [field index quota](https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/CloudWatchLogs-Field-Indexing-Syntax). If you want to create a field index policy for a single log group, you can use [PutIndexPolicy](https://docs.aws.amazon.com/AmazonCloudWatchLogs/latest/APIReference/API_PutIndexPolicy.html) instead of PutAccountPolicy. If you do so, that log group will use that log-group level policy and any account-level policies that match at the data source level; any account-level policy that matches at the log group level (for example, no selection criteria or log group name prefix selection criteria) will be ignored. Metric extraction policy A metric extraction policy controls whether CloudWatch Metrics can be created through the Embedded Metrics Format (EMF) for log groups in your account. By default, EMF metric creation is enabled for all log groups. You can use metric extraction policies to disable EMF metric creation for your entire account or specific log groups. When a policy disables EMF metric creation for a log group, log events in the EMF format are still ingested, but no CloudWatch Metrics are created from them. Creating a policy disables metrics for AWS features that use EMF to create metrics, such as CloudWatch Container Insights and CloudWatch Application Signals. To prevent turning off those features by accident, we recommend that you exclude the underlying log-groups through a selection-criteria such as LogGroupNamePrefix NOT IN ["/aws/containerinsights", "/aws/ecs/containerinsights", "/aws/application-signals/data"]. Each account can have either one account-level metric extraction policy that applies to all log groups, or up to 5 policies that are each scoped to a subset of log groups with the selectionCriteria parameter. The selection criteria supports filtering by LogGroupName and LogGroupNamePrefix using the operators IN and NOT IN. You can specify up to 50 values in each IN or NOT IN list. The selection criteria can be specified in these formats: LogGroupName IN ["log-group-1", "log-group-2"]LogGroupNamePrefix NOT IN ["/aws/prefix1", "/aws/prefix2"] If you have multiple account-level metric extraction policies with selection criteria, no two of them can have overlapping criteria. For example, if you have one policy with selection criteria LogGroupNamePrefix IN ["my-log"], you can't have another metric extraction policy with selection criteria LogGroupNamePrefix IN ["/my-log-prod"] or LogGroupNamePrefix IN ["/my-logging"], as the set of log groups matching these prefixes would be a subset of the log groups matching the first policy's prefix, creating an overlap. When using NOT IN, only one policy with this operator is allowed per account. When combining policies with IN and NOT IN operators, the overlap check ensures that policies don't have conflicting effects. Two policies with IN and NOT IN operators do not overlap if and only if every value in the IN policy is completely contained within some value in the NOT IN policy. For example:
+    /// Default field indexes are in addition to any custom field indexes you define within your policy. Default field indexes are not counted towards your [field index quota](https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/CloudWatchLogs-Field-Indexing-Syntax). If you want to create a field index policy for a single log group, you can use [PutIndexPolicy](https://docs.aws.amazon.com/AmazonCloudWatchLogs/latest/APIReference/API_PutIndexPolicy.html) instead of PutAccountPolicy. If you do so, that log group will use that log-group level policy and any account-level policies that match at the data source level; any account-level policy that matches at the log group level (for example, no selection criteria or log group name prefix selection criteria) will be ignored. Metric extraction policy A metric extraction policy controls whether CloudWatch Metrics can be created through the Embedded Metrics Format (EMF) for log groups in your account. By default, EMF metric creation is enabled for all log groups. You can use metric extraction policies to disable EMF metric creation for your entire account or specific log groups. When a policy disables EMF metric creation for a log group, log events in the EMF format are still ingested, but no CloudWatch Metrics are created from them. Creating a policy disables metrics for Amazon Web Services features that use EMF to create metrics, such as CloudWatch Container Insights and CloudWatch Application Signals. To prevent turning off those features by accident, we recommend that you exclude the underlying log-groups through a selection-criteria such as LogGroupNamePrefix NOT IN ["/aws/containerinsights", "/aws/ecs/containerinsights", "/aws/application-signals/data"]. Each account can have either one account-level metric extraction policy that applies to all log groups, or up to 5 policies that are each scoped to a subset of log groups with the selectionCriteria parameter. The selection criteria supports filtering by LogGroupName and LogGroupNamePrefix using the operators IN and NOT IN. You can specify up to 50 values in each IN or NOT IN list. The selection criteria can be specified in these formats: LogGroupName IN ["log-group-1", "log-group-2"]LogGroupNamePrefix NOT IN ["/aws/prefix1", "/aws/prefix2"] If you have multiple account-level metric extraction policies with selection criteria, no two of them can have overlapping criteria. For example, if you have one policy with selection criteria LogGroupNamePrefix IN ["my-log"], you can't have another metric extraction policy with selection criteria LogGroupNamePrefix IN ["/my-log-prod"] or LogGroupNamePrefix IN ["/my-logging"], as the set of log groups matching these prefixes would be a subset of the log groups matching the first policy's prefix, creating an overlap. When using NOT IN, only one policy with this operator is allowed per account. When combining policies with IN and NOT IN operators, the overlap check ensures that policies don't have conflicting effects. Two policies with IN and NOT IN operators do not overlap if and only if every value in the IN policy is completely contained within some value in the NOT IN policy. For example:
     ///
     /// * If you have a NOT IN policy for prefix "/aws/lambda", you can create an IN policy for the exact log group name "/aws/lambda/function1" because the set of log groups matching "/aws/lambda/function1" is a subset of the log groups matching "/aws/lambda".
     ///
@@ -6182,7 +6425,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<PutAccountPolicyOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<PutAccountPolicyInput, PutAccountPolicyOutput>(xAmzTarget: "Logs_20140328.PutAccountPolicy"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<PutAccountPolicyInput, PutAccountPolicyOutput>(overrides: ["X-Amz-Target": "Logs_20140328.PutAccountPolicy"]))
         builder.serialize(ClientRuntime.BodyMiddleware<PutAccountPolicyInput, PutAccountPolicyOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: PutAccountPolicyInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<PutAccountPolicyInput, PutAccountPolicyOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<PutAccountPolicyOutput>())
@@ -6192,6 +6435,80 @@ extension CloudWatchLogsClient {
         var metricsAttributes = Smithy.Attributes()
         metricsAttributes.set(key: ClientRuntime.OrchestratorMetricsAttributesKeys.service, value: "CloudWatchLogs")
         metricsAttributes.set(key: ClientRuntime.OrchestratorMetricsAttributesKeys.method, value: "PutAccountPolicy")
+        let op = builder.attributes(context)
+            .telemetry(ClientRuntime.OrchestratorTelemetry(
+                telemetryProvider: config.telemetryProvider,
+                metricsAttributes: metricsAttributes,
+                meterScope: serviceName,
+                tracerScope: serviceName
+            ))
+            .executeRequest(client)
+            .build()
+        return try await op.execute(input: input)
+    }
+
+    /// Performs the `PutBearerTokenAuthentication` operation on the `CloudWatchLogs` service.
+    ///
+    /// Enables or disables bearer token authentication for the specified log group. When enabled on a log group, bearer token authentication is enabled on operations until it is explicitly disabled. For information about the parameters that are common to all actions, see [Common Parameters](https://docs.aws.amazon.com/AmazonCloudWatchLogs/latest/APIReference/CommonParameters.html).
+    ///
+    /// - Parameter input: [no documentation found] (Type: `PutBearerTokenAuthenticationInput`)
+    ///
+    /// - Returns: [no documentation found] (Type: `PutBearerTokenAuthenticationOutput`)
+    ///
+    /// - Throws: One of the exceptions listed below __Possible Exceptions__.
+    ///
+    /// __Possible Exceptions:__
+    /// - `AccessDeniedException` : You don't have sufficient permissions to perform this action.
+    /// - `InvalidOperationException` : The operation is not valid on the specified resource.
+    /// - `InvalidParameterException` : A parameter is specified incorrectly.
+    /// - `OperationAbortedException` : Multiple concurrent requests to update the same resource were in conflict.
+    /// - `ResourceNotFoundException` : The specified resource does not exist.
+    /// - `ServiceUnavailableException` : The service cannot complete the request.
+    public func putBearerTokenAuthentication(input: PutBearerTokenAuthenticationInput) async throws -> PutBearerTokenAuthenticationOutput {
+        let context = Smithy.ContextBuilder()
+                      .withMethod(value: .post)
+                      .withServiceName(value: serviceName)
+                      .withOperation(value: "putBearerTokenAuthentication")
+                      .withUnsignedPayloadTrait(value: false)
+                      .withSmithyDefaultConfig(config)
+                      .withIdentityResolver(value: config.awsCredentialIdentityResolver, schemeID: "aws.auth#sigv4a")
+                      .withRegion(value: config.region)
+                      .withRequestChecksumCalculation(value: config.requestChecksumCalculation)
+                      .withResponseChecksumValidation(value: config.responseChecksumValidation)
+                      .withSigningName(value: "logs")
+                      .withSigningRegion(value: config.signingRegion)
+                      .build()
+        let builder = ClientRuntime.OrchestratorBuilder<PutBearerTokenAuthenticationInput, PutBearerTokenAuthenticationOutput, SmithyHTTPAPI.HTTPRequest, SmithyHTTPAPI.HTTPResponse>()
+        config.interceptorProviders.forEach { provider in
+            builder.interceptors.add(provider.create())
+        }
+        config.httpInterceptorProviders.forEach { provider in
+            builder.interceptors.add(provider.create())
+        }
+        builder.interceptors.add(ClientRuntime.URLPathMiddleware<PutBearerTokenAuthenticationInput, PutBearerTokenAuthenticationOutput>(PutBearerTokenAuthenticationInput.urlPathProvider(_:)))
+        builder.interceptors.add(ClientRuntime.URLHostMiddleware<PutBearerTokenAuthenticationInput, PutBearerTokenAuthenticationOutput>())
+        builder.interceptors.add(ClientRuntime.ContentLengthMiddleware<PutBearerTokenAuthenticationInput, PutBearerTokenAuthenticationOutput>())
+        builder.deserialize(ClientRuntime.DeserializeMiddleware<PutBearerTokenAuthenticationOutput>(PutBearerTokenAuthenticationOutput.httpOutput(from:), PutBearerTokenAuthenticationOutputError.httpError(from:)))
+        builder.interceptors.add(ClientRuntime.LoggerMiddleware<PutBearerTokenAuthenticationInput, PutBearerTokenAuthenticationOutput>(clientLogMode: config.clientLogMode))
+        builder.clockSkewProvider(AWSClientRuntime.AWSClockSkewProvider.provider())
+        builder.retryStrategy(SmithyRetries.DefaultRetryStrategy(options: config.retryStrategyOptions))
+        builder.retryErrorInfoProvider(AWSClientRuntime.AWSRetryErrorInfoProvider.errorInfo(for:))
+        builder.applySigner(ClientRuntime.SignerMiddleware<PutBearerTokenAuthenticationOutput>())
+        let configuredEndpoint = try config.endpoint ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.configuredEndpoint("CloudWatch Logs", config.ignoreConfiguredEndpointURLs)
+        let endpointParamsBlock = { [config] (context: Smithy.Context) in
+            EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
+        }
+        builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<PutBearerTokenAuthenticationOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<PutBearerTokenAuthenticationInput, PutBearerTokenAuthenticationOutput>(overrides: ["X-Amz-Target": "Logs_20140328.PutBearerTokenAuthentication"]))
+        builder.serialize(ClientRuntime.BodyMiddleware<PutBearerTokenAuthenticationInput, PutBearerTokenAuthenticationOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: PutBearerTokenAuthenticationInput.write(value:to:)))
+        builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<PutBearerTokenAuthenticationInput, PutBearerTokenAuthenticationOutput>(contentType: "application/x-amz-json-1.1"))
+        builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<PutBearerTokenAuthenticationOutput>())
+        builder.interceptors.add(AWSClientRuntime.AmzSdkInvocationIdMiddleware<PutBearerTokenAuthenticationInput, PutBearerTokenAuthenticationOutput>())
+        builder.interceptors.add(AWSClientRuntime.AmzSdkRequestMiddleware<PutBearerTokenAuthenticationInput, PutBearerTokenAuthenticationOutput>(maxRetries: config.retryStrategyOptions.maxRetriesBase))
+        builder.interceptors.add(AWSClientRuntime.UserAgentMiddleware<PutBearerTokenAuthenticationInput, PutBearerTokenAuthenticationOutput>(serviceID: serviceName, version: CloudWatchLogsClient.version, config: config))
+        var metricsAttributes = Smithy.Attributes()
+        metricsAttributes.set(key: ClientRuntime.OrchestratorMetricsAttributesKeys.service, value: "CloudWatchLogs")
+        metricsAttributes.set(key: ClientRuntime.OrchestratorMetricsAttributesKeys.method, value: "PutBearerTokenAuthentication")
         let op = builder.attributes(context)
             .telemetry(ClientRuntime.OrchestratorTelemetry(
                 telemetryProvider: config.telemetryProvider,
@@ -6255,7 +6572,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<PutDataProtectionPolicyOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<PutDataProtectionPolicyInput, PutDataProtectionPolicyOutput>(xAmzTarget: "Logs_20140328.PutDataProtectionPolicy"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<PutDataProtectionPolicyInput, PutDataProtectionPolicyOutput>(overrides: ["X-Amz-Target": "Logs_20140328.PutDataProtectionPolicy"]))
         builder.serialize(ClientRuntime.BodyMiddleware<PutDataProtectionPolicyInput, PutDataProtectionPolicyOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: PutDataProtectionPolicyInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<PutDataProtectionPolicyInput, PutDataProtectionPolicyOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<PutDataProtectionPolicyOutput>())
@@ -6340,7 +6657,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<PutDeliveryDestinationOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<PutDeliveryDestinationInput, PutDeliveryDestinationOutput>(xAmzTarget: "Logs_20140328.PutDeliveryDestination"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<PutDeliveryDestinationInput, PutDeliveryDestinationOutput>(overrides: ["X-Amz-Target": "Logs_20140328.PutDeliveryDestination"]))
         builder.serialize(ClientRuntime.BodyMiddleware<PutDeliveryDestinationInput, PutDeliveryDestinationOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: PutDeliveryDestinationInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<PutDeliveryDestinationInput, PutDeliveryDestinationOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<PutDeliveryDestinationOutput>())
@@ -6423,7 +6740,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<PutDeliveryDestinationPolicyOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<PutDeliveryDestinationPolicyInput, PutDeliveryDestinationPolicyOutput>(xAmzTarget: "Logs_20140328.PutDeliveryDestinationPolicy"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<PutDeliveryDestinationPolicyInput, PutDeliveryDestinationPolicyOutput>(overrides: ["X-Amz-Target": "Logs_20140328.PutDeliveryDestinationPolicy"]))
         builder.serialize(ClientRuntime.BodyMiddleware<PutDeliveryDestinationPolicyInput, PutDeliveryDestinationPolicyOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: PutDeliveryDestinationPolicyInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<PutDeliveryDestinationPolicyInput, PutDeliveryDestinationPolicyOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<PutDeliveryDestinationPolicyOutput>())
@@ -6508,7 +6825,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<PutDeliverySourceOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<PutDeliverySourceInput, PutDeliverySourceOutput>(xAmzTarget: "Logs_20140328.PutDeliverySource"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<PutDeliverySourceInput, PutDeliverySourceOutput>(overrides: ["X-Amz-Target": "Logs_20140328.PutDeliverySource"]))
         builder.serialize(ClientRuntime.BodyMiddleware<PutDeliverySourceInput, PutDeliverySourceOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: PutDeliverySourceInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<PutDeliverySourceInput, PutDeliverySourceOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<PutDeliverySourceOutput>())
@@ -6579,7 +6896,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<PutDestinationOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<PutDestinationInput, PutDestinationOutput>(xAmzTarget: "Logs_20140328.PutDestination"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<PutDestinationInput, PutDestinationOutput>(overrides: ["X-Amz-Target": "Logs_20140328.PutDestination"]))
         builder.serialize(ClientRuntime.BodyMiddleware<PutDestinationInput, PutDestinationOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: PutDestinationInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<PutDestinationInput, PutDestinationOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<PutDestinationOutput>())
@@ -6650,7 +6967,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<PutDestinationPolicyOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<PutDestinationPolicyInput, PutDestinationPolicyOutput>(xAmzTarget: "Logs_20140328.PutDestinationPolicy"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<PutDestinationPolicyInput, PutDestinationPolicyOutput>(overrides: ["X-Amz-Target": "Logs_20140328.PutDestinationPolicy"]))
         builder.serialize(ClientRuntime.BodyMiddleware<PutDestinationPolicyInput, PutDestinationPolicyOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: PutDestinationPolicyInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<PutDestinationPolicyInput, PutDestinationPolicyOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<PutDestinationPolicyOutput>())
@@ -6743,7 +7060,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<PutIndexPolicyOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<PutIndexPolicyInput, PutIndexPolicyOutput>(xAmzTarget: "Logs_20140328.PutIndexPolicy"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<PutIndexPolicyInput, PutIndexPolicyOutput>(overrides: ["X-Amz-Target": "Logs_20140328.PutIndexPolicy"]))
         builder.serialize(ClientRuntime.BodyMiddleware<PutIndexPolicyInput, PutIndexPolicyOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: PutIndexPolicyInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<PutIndexPolicyInput, PutIndexPolicyOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<PutIndexPolicyOutput>())
@@ -6815,7 +7132,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<PutIntegrationOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<PutIntegrationInput, PutIntegrationOutput>(xAmzTarget: "Logs_20140328.PutIntegration"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<PutIntegrationInput, PutIntegrationOutput>(overrides: ["X-Amz-Target": "Logs_20140328.PutIntegration"]))
         builder.serialize(ClientRuntime.BodyMiddleware<PutIntegrationInput, PutIntegrationOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: PutIntegrationInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<PutIntegrationInput, PutIntegrationOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<PutIntegrationOutput>())
@@ -6908,7 +7225,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<PutLogEventsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<PutLogEventsInput, PutLogEventsOutput>(xAmzTarget: "Logs_20140328.PutLogEvents"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<PutLogEventsInput, PutLogEventsOutput>(overrides: ["X-Amz-Target": "Logs_20140328.PutLogEvents"]))
         builder.serialize(ClientRuntime.BodyMiddleware<PutLogEventsInput, PutLogEventsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: PutLogEventsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<PutLogEventsInput, PutLogEventsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<PutLogEventsOutput>())
@@ -6982,7 +7299,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<PutLogGroupDeletionProtectionOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<PutLogGroupDeletionProtectionInput, PutLogGroupDeletionProtectionOutput>(xAmzTarget: "Logs_20140328.PutLogGroupDeletionProtection"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<PutLogGroupDeletionProtectionInput, PutLogGroupDeletionProtectionOutput>(overrides: ["X-Amz-Target": "Logs_20140328.PutLogGroupDeletionProtection"]))
         builder.serialize(ClientRuntime.BodyMiddleware<PutLogGroupDeletionProtectionInput, PutLogGroupDeletionProtectionOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: PutLogGroupDeletionProtectionInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<PutLogGroupDeletionProtectionInput, PutLogGroupDeletionProtectionOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<PutLogGroupDeletionProtectionOutput>())
@@ -7056,7 +7373,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<PutMetricFilterOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<PutMetricFilterInput, PutMetricFilterOutput>(xAmzTarget: "Logs_20140328.PutMetricFilter"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<PutMetricFilterInput, PutMetricFilterOutput>(overrides: ["X-Amz-Target": "Logs_20140328.PutMetricFilter"]))
         builder.serialize(ClientRuntime.BodyMiddleware<PutMetricFilterInput, PutMetricFilterOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: PutMetricFilterInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<PutMetricFilterInput, PutMetricFilterOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<PutMetricFilterOutput>())
@@ -7129,7 +7446,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<PutQueryDefinitionOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<PutQueryDefinitionInput, PutQueryDefinitionOutput>(xAmzTarget: "Logs_20140328.PutQueryDefinition"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<PutQueryDefinitionInput, PutQueryDefinitionOutput>(overrides: ["X-Amz-Target": "Logs_20140328.PutQueryDefinition"]))
         builder.serialize(ClientRuntime.BodyMiddleware<PutQueryDefinitionInput, PutQueryDefinitionOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: PutQueryDefinitionInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<PutQueryDefinitionInput, PutQueryDefinitionOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<PutQueryDefinitionOutput>())
@@ -7211,7 +7528,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<PutResourcePolicyOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<PutResourcePolicyInput, PutResourcePolicyOutput>(xAmzTarget: "Logs_20140328.PutResourcePolicy"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<PutResourcePolicyInput, PutResourcePolicyOutput>(overrides: ["X-Amz-Target": "Logs_20140328.PutResourcePolicy"]))
         builder.serialize(ClientRuntime.BodyMiddleware<PutResourcePolicyInput, PutResourcePolicyOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: PutResourcePolicyInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<PutResourcePolicyInput, PutResourcePolicyOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<PutResourcePolicyOutput>())
@@ -7283,7 +7600,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<PutRetentionPolicyOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<PutRetentionPolicyInput, PutRetentionPolicyOutput>(xAmzTarget: "Logs_20140328.PutRetentionPolicy"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<PutRetentionPolicyInput, PutRetentionPolicyOutput>(overrides: ["X-Amz-Target": "Logs_20140328.PutRetentionPolicy"]))
         builder.serialize(ClientRuntime.BodyMiddleware<PutRetentionPolicyInput, PutRetentionPolicyOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: PutRetentionPolicyInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<PutRetentionPolicyInput, PutRetentionPolicyOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<PutRetentionPolicyOutput>())
@@ -7368,7 +7685,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<PutSubscriptionFilterOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<PutSubscriptionFilterInput, PutSubscriptionFilterOutput>(xAmzTarget: "Logs_20140328.PutSubscriptionFilter"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<PutSubscriptionFilterInput, PutSubscriptionFilterOutput>(overrides: ["X-Amz-Target": "Logs_20140328.PutSubscriptionFilter"]))
         builder.serialize(ClientRuntime.BodyMiddleware<PutSubscriptionFilterInput, PutSubscriptionFilterOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: PutSubscriptionFilterInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<PutSubscriptionFilterInput, PutSubscriptionFilterOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<PutSubscriptionFilterOutput>())
@@ -7442,7 +7759,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<PutTransformerOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<PutTransformerInput, PutTransformerOutput>(xAmzTarget: "Logs_20140328.PutTransformer"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<PutTransformerInput, PutTransformerOutput>(overrides: ["X-Amz-Target": "Logs_20140328.PutTransformer"]))
         builder.serialize(ClientRuntime.BodyMiddleware<PutTransformerInput, PutTransformerOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: PutTransformerInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<PutTransformerInput, PutTransformerOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<PutTransformerOutput>())
@@ -7477,7 +7794,7 @@ extension CloudWatchLogsClient {
     /// * A [SessionTimeoutException](https://docs.aws.amazon.com/AmazonCloudWatchLogs/latest/APIReference/API_StartLiveTailResponseStream.html#CWL-Type-StartLiveTailResponseStream-SessionTimeoutException) object is returned when the session times out, after it has been kept open for three hours.
     ///
     ///
-    /// The StartLiveTail API routes requests to streaming-logs.Region.amazonaws.com using SDK host prefix injection. VPC endpoint support is not available for this API. You can end a session before it times out by closing the session stream or by closing the client that is receiving the stream. The session also ends if the established connection between the client and the server breaks. For examples of using an SDK to start a Live Tail session, see [ Start a Live Tail session using an Amazon Web Services SDK](https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/example_cloudwatch-logs_StartLiveTail_section.html).
+    /// The StartLiveTail API routes requests using SDK host prefix injection. SDK versions released before April 1, 2026 route to streaming-logs.Region.amazonaws.com, which does not support VPC endpoints. SDK versions released on or after April 1, 2026 route to stream-logs.Region.amazonaws.com, which supports VPC endpoints. To set up a VPC endpoint for this API, see [Creating a VPC endpoint for CloudWatch Logs ](https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/cloudwatch-logs-and-interface-VPC.html#create-VPC-endpoint-for-CloudWatchLogs). You can end a session before it times out by closing the session stream or by closing the client that is receiving the stream. The session also ends if the established connection between the client and the server breaks. For examples of using an SDK to start a Live Tail session, see [ Start a Live Tail session using an Amazon Web Services SDK](https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/example_cloudwatch-logs_StartLiveTail_section.html).
     ///
     /// - Parameter input: [no documentation found] (Type: `StartLiveTailInput`)
     ///
@@ -7526,7 +7843,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<StartLiveTailOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<StartLiveTailInput, StartLiveTailOutput>(xAmzTarget: "Logs_20140328.StartLiveTail"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<StartLiveTailInput, StartLiveTailOutput>(overrides: ["X-Amz-Target": "Logs_20140328.StartLiveTail"]))
         builder.serialize(ClientRuntime.BodyMiddleware<StartLiveTailInput, StartLiveTailOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: StartLiveTailInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<StartLiveTailInput, StartLiveTailOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<StartLiveTailOutput>())
@@ -7606,7 +7923,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<StartQueryOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<StartQueryInput, StartQueryOutput>(xAmzTarget: "Logs_20140328.StartQuery"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<StartQueryInput, StartQueryOutput>(overrides: ["X-Amz-Target": "Logs_20140328.StartQuery"]))
         builder.serialize(ClientRuntime.BodyMiddleware<StartQueryInput, StartQueryOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: StartQueryInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<StartQueryInput, StartQueryOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<StartQueryOutput>())
@@ -7677,7 +7994,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<StopQueryOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<StopQueryInput, StopQueryOutput>(xAmzTarget: "Logs_20140328.StopQuery"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<StopQueryInput, StopQueryOutput>(overrides: ["X-Amz-Target": "Logs_20140328.StopQuery"]))
         builder.serialize(ClientRuntime.BodyMiddleware<StopQueryInput, StopQueryOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: StopQueryInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<StopQueryInput, StopQueryOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<StopQueryOutput>())
@@ -7748,7 +8065,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<TagLogGroupOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<TagLogGroupInput, TagLogGroupOutput>(xAmzTarget: "Logs_20140328.TagLogGroup"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<TagLogGroupInput, TagLogGroupOutput>(overrides: ["X-Amz-Target": "Logs_20140328.TagLogGroup"]))
         builder.serialize(ClientRuntime.BodyMiddleware<TagLogGroupInput, TagLogGroupOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: TagLogGroupInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<TagLogGroupInput, TagLogGroupOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<TagLogGroupOutput>())
@@ -7820,7 +8137,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<TagResourceOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<TagResourceInput, TagResourceOutput>(xAmzTarget: "Logs_20140328.TagResource"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<TagResourceInput, TagResourceOutput>(overrides: ["X-Amz-Target": "Logs_20140328.TagResource"]))
         builder.serialize(ClientRuntime.BodyMiddleware<TagResourceInput, TagResourceOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: TagResourceInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<TagResourceInput, TagResourceOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<TagResourceOutput>())
@@ -7890,7 +8207,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<TestMetricFilterOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<TestMetricFilterInput, TestMetricFilterOutput>(xAmzTarget: "Logs_20140328.TestMetricFilter"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<TestMetricFilterInput, TestMetricFilterOutput>(overrides: ["X-Amz-Target": "Logs_20140328.TestMetricFilter"]))
         builder.serialize(ClientRuntime.BodyMiddleware<TestMetricFilterInput, TestMetricFilterOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: TestMetricFilterInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<TestMetricFilterInput, TestMetricFilterOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<TestMetricFilterOutput>())
@@ -7961,7 +8278,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<TestTransformerOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<TestTransformerInput, TestTransformerOutput>(xAmzTarget: "Logs_20140328.TestTransformer"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<TestTransformerInput, TestTransformerOutput>(overrides: ["X-Amz-Target": "Logs_20140328.TestTransformer"]))
         builder.serialize(ClientRuntime.BodyMiddleware<TestTransformerInput, TestTransformerOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: TestTransformerInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<TestTransformerInput, TestTransformerOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<TestTransformerOutput>())
@@ -8031,7 +8348,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UntagLogGroupOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UntagLogGroupInput, UntagLogGroupOutput>(xAmzTarget: "Logs_20140328.UntagLogGroup"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UntagLogGroupInput, UntagLogGroupOutput>(overrides: ["X-Amz-Target": "Logs_20140328.UntagLogGroup"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UntagLogGroupInput, UntagLogGroupOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UntagLogGroupInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UntagLogGroupInput, UntagLogGroupOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UntagLogGroupOutput>())
@@ -8102,7 +8419,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UntagResourceOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UntagResourceInput, UntagResourceOutput>(xAmzTarget: "Logs_20140328.UntagResource"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UntagResourceInput, UntagResourceOutput>(overrides: ["X-Amz-Target": "Logs_20140328.UntagResource"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UntagResourceInput, UntagResourceOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UntagResourceInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UntagResourceInput, UntagResourceOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UntagResourceOutput>())
@@ -8174,7 +8491,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateAnomalyOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateAnomalyInput, UpdateAnomalyOutput>(xAmzTarget: "Logs_20140328.UpdateAnomaly"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateAnomalyInput, UpdateAnomalyOutput>(overrides: ["X-Amz-Target": "Logs_20140328.UpdateAnomaly"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateAnomalyInput, UpdateAnomalyOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateAnomalyInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateAnomalyInput, UpdateAnomalyOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateAnomalyOutput>())
@@ -8248,7 +8565,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateDeliveryConfigurationOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateDeliveryConfigurationInput, UpdateDeliveryConfigurationOutput>(xAmzTarget: "Logs_20140328.UpdateDeliveryConfiguration"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateDeliveryConfigurationInput, UpdateDeliveryConfigurationOutput>(overrides: ["X-Amz-Target": "Logs_20140328.UpdateDeliveryConfiguration"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateDeliveryConfigurationInput, UpdateDeliveryConfigurationOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateDeliveryConfigurationInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateDeliveryConfigurationInput, UpdateDeliveryConfigurationOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateDeliveryConfigurationOutput>())
@@ -8320,7 +8637,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateLogAnomalyDetectorOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateLogAnomalyDetectorInput, UpdateLogAnomalyDetectorOutput>(xAmzTarget: "Logs_20140328.UpdateLogAnomalyDetector"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateLogAnomalyDetectorInput, UpdateLogAnomalyDetectorOutput>(overrides: ["X-Amz-Target": "Logs_20140328.UpdateLogAnomalyDetector"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateLogAnomalyDetectorInput, UpdateLogAnomalyDetectorOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateLogAnomalyDetectorInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateLogAnomalyDetectorInput, UpdateLogAnomalyDetectorOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateLogAnomalyDetectorOutput>())
@@ -8393,7 +8710,7 @@ extension CloudWatchLogsClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateScheduledQueryOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateScheduledQueryInput, UpdateScheduledQueryOutput>(xAmzTarget: "Logs_20140328.UpdateScheduledQuery"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateScheduledQueryInput, UpdateScheduledQueryOutput>(overrides: ["X-Amz-Target": "Logs_20140328.UpdateScheduledQuery"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateScheduledQueryInput, UpdateScheduledQueryOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateScheduledQueryInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateScheduledQueryInput, UpdateScheduledQueryOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateScheduledQueryOutput>())

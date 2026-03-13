@@ -30,6 +30,7 @@ import enum AWSSDKChecksums.AWSChecksumCalculationMode
 import enum ClientRuntime.ClientLogMode
 import enum ClientRuntime.DefaultTelemetry
 import enum ClientRuntime.OrchestratorMetricsAttributesKeys
+import func ClientRuntime.initialize
 import protocol AWSClientRuntime.AWSDefaultClientConfiguration
 import protocol AWSClientRuntime.AWSRegionClientConfiguration
 import protocol AWSClientRuntime.AWSServiceClient
@@ -48,7 +49,6 @@ import protocol SmithyIdentity.BearerTokenIdentityResolver
 @_spi(AWSEndpointResolverMiddleware) import struct AWSClientRuntime.AWSEndpointResolverMiddleware
 import struct AWSClientRuntime.AmzSdkInvocationIdMiddleware
 import struct AWSClientRuntime.UserAgentMiddleware
-import struct AWSClientRuntime.XAmzTargetMiddleware
 import struct AWSSDKHTTPAuth.SigV4AuthScheme
 import struct ClientRuntime.AuthSchemeMiddleware
 @_spi(SmithyReadWrite) import struct ClientRuntime.BodyMiddleware
@@ -56,6 +56,9 @@ import struct ClientRuntime.ContentLengthMiddleware
 import struct ClientRuntime.ContentTypeMiddleware
 @_spi(SmithyReadWrite) import struct ClientRuntime.DeserializeMiddleware
 import struct ClientRuntime.LoggerMiddleware
+import struct ClientRuntime.MutateHeadersMiddleware
+import struct ClientRuntime.SendableHttpInterceptorProviderBox
+import struct ClientRuntime.SendableInterceptorProviderBox
 import struct ClientRuntime.SignerMiddleware
 import struct ClientRuntime.URLHostMiddleware
 import struct ClientRuntime.URLPathMiddleware
@@ -66,31 +69,49 @@ import struct SmithyRetries.DefaultRetryStrategy
 import struct SmithyRetriesAPI.RetryStrategyOptions
 import typealias SmithyHTTPAuthAPI.AuthSchemes
 
-public class WorkSpacesClient: AWSClientRuntime.AWSServiceClient {
+public final class WorkSpacesClient: AWSClientRuntime.AWSServiceClient {
     public static let clientName = "WorkSpacesClient"
     let client: ClientRuntime.SdkHttpClient
-    let config: WorkSpacesClient.WorkSpacesClientConfiguration
+    public let config: WorkSpacesClient.WorkSpacesClientConfig
     let serviceName = "WorkSpaces"
 
-    public required init(config: WorkSpacesClient.WorkSpacesClientConfiguration) {
+    @available(*, deprecated, message: "Use WorkSpacesClient.WorkSpacesClientConfig instead")
+    public typealias Config = WorkSpacesClient.WorkSpacesClientConfiguration
+    public typealias Configuration = WorkSpacesClient.WorkSpacesClientConfig
+
+    public required init(config: WorkSpacesClient.WorkSpacesClientConfig) {
+        ClientRuntime.initialize()
         client = ClientRuntime.SdkHttpClient(engine: config.httpClientEngine, config: config.httpClientConfiguration)
         self.config = config
     }
 
+    @available(*, deprecated, message: "Use init(config: WorkSpacesClient.WorkSpacesClientConfig) instead")
+    public convenience init(config: WorkSpacesClient.WorkSpacesClientConfiguration) {
+        do {
+            try self.init(config: config.toSendable())
+        } catch {
+            // This should never happen since all values are already initialized in the class
+            fatalError("Failed to convert deprecated configuration: \(error)")
+        }
+    }
+
     public convenience init(region: Swift.String) throws {
-        let config = try WorkSpacesClient.WorkSpacesClientConfiguration(region: region)
+        let config = try WorkSpacesClient.WorkSpacesClientConfig(region: region)
         self.init(config: config)
     }
 
-    public convenience required init() async throws {
-        let config = try await WorkSpacesClient.WorkSpacesClientConfiguration()
+    public convenience init() async throws {
+        let config = try await WorkSpacesClient.WorkSpacesClientConfig()
         self.init(config: config)
     }
 }
 
 extension WorkSpacesClient {
 
-    public class WorkSpacesClientConfiguration: AWSClientRuntime.AWSDefaultClientConfiguration & AWSClientRuntime.AWSRegionClientConfiguration & ClientRuntime.DefaultClientConfiguration & ClientRuntime.DefaultHttpClientConfiguration {
+    /// Client configuration for WorkSpacesClient
+    ///
+    /// Conforms to `Sendable` for safe concurrent access across threads.
+    public struct WorkSpacesClientConfig: AWSClientRuntime.AWSDefaultClientConfiguration & AWSClientRuntime.AWSRegionClientConfiguration & ClientRuntime.DefaultClientConfiguration & ClientRuntime.DefaultHttpClientConfiguration, Swift.Sendable {
         public var useFIPS: Swift.Bool?
         public var useDualStack: Swift.Bool?
         public var appID: Swift.String?
@@ -114,66 +135,29 @@ extension WorkSpacesClient {
         public var authSchemePreference: [String]?
         public var authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver
         public var bearerTokenIdentityResolver: any SmithyIdentity.BearerTokenIdentityResolver
-        public private(set) var interceptorProviders: [ClientRuntime.InterceptorProvider]
-        public private(set) var httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]
-        public let logger: Smithy.LogAgent
-
-        private init(
-            _ useFIPS: Swift.Bool?,
-            _ useDualStack: Swift.Bool?,
-            _ appID: Swift.String?,
-            _ awsCredentialIdentityResolver: any SmithyIdentity.AWSCredentialIdentityResolver,
-            _ awsRetryMode: AWSClientRuntime.AWSRetryMode,
-            _ maxAttempts: Swift.Int?,
-            _ requestChecksumCalculation: AWSSDKChecksums.AWSChecksumCalculationMode,
-            _ responseChecksumValidation: AWSSDKChecksums.AWSChecksumCalculationMode,
-            _ ignoreConfiguredEndpointURLs: Swift.Bool?,
-            _ region: Swift.String?,
-            _ signingRegion: Swift.String?,
-            _ endpointResolver: EndpointResolver,
-            _ telemetryProvider: ClientRuntime.TelemetryProvider,
-            _ retryStrategyOptions: SmithyRetriesAPI.RetryStrategyOptions,
-            _ clientLogMode: ClientRuntime.ClientLogMode,
-            _ endpoint: Swift.String?,
-            _ idempotencyTokenGenerator: ClientRuntime.IdempotencyTokenGenerator,
-            _ httpClientEngine: SmithyHTTPAPI.HTTPClient,
-            _ httpClientConfiguration: ClientRuntime.HttpClientConfiguration,
-            _ authSchemes: SmithyHTTPAuthAPI.AuthSchemes?,
-            _ authSchemePreference: [String]?,
-            _ authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver,
-            _ bearerTokenIdentityResolver: any SmithyIdentity.BearerTokenIdentityResolver,
-            _ interceptorProviders: [ClientRuntime.InterceptorProvider],
-            _ httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]
-        ) {
-            self.useFIPS = useFIPS
-            self.useDualStack = useDualStack
-            self.appID = appID
-            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver
-            self.awsRetryMode = awsRetryMode
-            self.maxAttempts = maxAttempts
-            self.requestChecksumCalculation = requestChecksumCalculation
-            self.responseChecksumValidation = responseChecksumValidation
-            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
-            self.region = region
-            self.signingRegion = signingRegion
-            self.endpointResolver = endpointResolver
-            self.telemetryProvider = telemetryProvider
-            self.retryStrategyOptions = retryStrategyOptions
-            self.clientLogMode = clientLogMode
-            self.endpoint = endpoint
-            self.idempotencyTokenGenerator = idempotencyTokenGenerator
-            self.httpClientEngine = httpClientEngine
-            self.httpClientConfiguration = httpClientConfiguration
-            self.authSchemes = authSchemes
-            self.authSchemePreference = authSchemePreference
-            self.authSchemeResolver = authSchemeResolver
-            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver
-            self.interceptorProviders = interceptorProviders
-            self.httpInterceptorProviders = httpInterceptorProviders
-            self.logger = telemetryProvider.loggerProvider.getLogger(name: WorkSpacesClient.clientName)
+        // Interceptor providers with Sendable-safe internal storage
+        private var _interceptorProviders: [ClientRuntime.SendableInterceptorProviderBox] = []
+        public var interceptorProviders: [ClientRuntime.InterceptorProvider] {
+            get {
+                return _interceptorProviders
+            }
+            set {
+                _interceptorProviders = newValue.map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            }
         }
 
-        public convenience init(
+        private var _httpInterceptorProviders: [ClientRuntime.SendableHttpInterceptorProviderBox] = []
+        public var httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider] {
+            get {
+                return _httpInterceptorProviders
+            }
+            set {
+                _httpInterceptorProviders = newValue.map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            }
+        }
+        public var logger: Smithy.LogAgent
+
+        public init(
             useFIPS: Swift.Bool? = nil,
             useDualStack: Swift.Bool? = nil,
             appID: Swift.String? = nil,
@@ -200,36 +184,35 @@ extension WorkSpacesClient {
             interceptorProviders: [ClientRuntime.InterceptorProvider]? = nil,
             httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]? = nil
         ) throws {
-            self.init(
-                useFIPS,
-                useDualStack,
-                try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
-                awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
-                try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
-                maxAttempts,
-                try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation),
-                try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation),
-                ignoreConfiguredEndpointURLs,
-                region,
-                signingRegion,
-                try endpointResolver ?? DefaultEndpointResolver(),
-                telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider,
-                try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts),
-                clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode(),
-                endpoint,
-                idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
-                httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration),
-                httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration(),
-                authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()],
-                authSchemePreference ?? nil,
-                authSchemeResolver ?? DefaultWorkSpacesAuthSchemeResolver(),
-                bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
-                interceptorProviders ?? [],
-                httpInterceptorProviders ?? []
-            )
+            self.useFIPS = useFIPS
+            self.useDualStack = useDualStack
+            self.appID = try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID()
+            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain()
+            self.awsRetryMode = try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode()
+            self.maxAttempts = maxAttempts
+            self.requestChecksumCalculation = try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation)
+            self.responseChecksumValidation = try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation)
+            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
+            self.region = region
+            self.signingRegion = signingRegion
+            self.endpointResolver = try endpointResolver ?? DefaultEndpointResolver()
+            self.telemetryProvider = telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider
+            self.retryStrategyOptions = try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts)
+            self.clientLogMode = clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode()
+            self.endpoint = endpoint
+            self.idempotencyTokenGenerator = idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator()
+            self.httpClientEngine = httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration)
+            self.httpClientConfiguration = httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration()
+            self.authSchemes = authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()]
+            self.authSchemePreference = authSchemePreference ?? nil
+            self.authSchemeResolver = authSchemeResolver ?? DefaultWorkSpacesAuthSchemeResolver()
+            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: ""))
+            self._interceptorProviders = (interceptorProviders ?? []).map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            self._httpInterceptorProviders = (httpInterceptorProviders ?? []).map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            self.logger = (telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider).loggerProvider.getLogger(name: WorkSpacesClient.clientName)
         }
 
-        public convenience init(
+        public init(
             useFIPS: Swift.Bool? = nil,
             useDualStack: Swift.Bool? = nil,
             appID: Swift.String? = nil,
@@ -256,36 +239,266 @@ extension WorkSpacesClient {
             interceptorProviders: [ClientRuntime.InterceptorProvider]? = nil,
             httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]? = nil
         ) async throws {
-            self.init(
-                useFIPS,
-                useDualStack,
-                try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
-                awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
-                try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
-                maxAttempts,
-                try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation),
-                try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation),
-                ignoreConfiguredEndpointURLs,
-                try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region),
-                try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region),
-                try endpointResolver ?? DefaultEndpointResolver(),
-                telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider,
-                try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts),
-                clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode(),
-                endpoint,
-                idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
-                httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration),
-                httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration(),
-                authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()],
-                authSchemePreference ?? nil,
-                authSchemeResolver ?? DefaultWorkSpacesAuthSchemeResolver(),
-                bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
-                interceptorProviders ?? [],
-                httpInterceptorProviders ?? []
+            self.useFIPS = useFIPS
+            self.useDualStack = useDualStack
+            self.appID = try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID()
+            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain()
+            self.awsRetryMode = try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode()
+            self.maxAttempts = maxAttempts
+            self.requestChecksumCalculation = try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation)
+            self.responseChecksumValidation = try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation)
+            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
+            self.region = try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region)
+            self.signingRegion = try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region)
+            self.endpointResolver = try endpointResolver ?? DefaultEndpointResolver()
+            self.telemetryProvider = telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider
+            self.retryStrategyOptions = try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts)
+            self.clientLogMode = clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode()
+            self.endpoint = endpoint
+            self.idempotencyTokenGenerator = idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator()
+            self.httpClientEngine = httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration)
+            self.httpClientConfiguration = httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration()
+            self.authSchemes = authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()]
+            self.authSchemePreference = authSchemePreference ?? nil
+            self.authSchemeResolver = authSchemeResolver ?? DefaultWorkSpacesAuthSchemeResolver()
+            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: ""))
+            self._interceptorProviders = (interceptorProviders ?? []).map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            self._httpInterceptorProviders = (httpInterceptorProviders ?? []).map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            self.logger = (telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider).loggerProvider.getLogger(name: WorkSpacesClient.clientName)
+        }
+
+        public init() async throws {
+            try await self.init(
+                useFIPS: nil,
+                useDualStack: nil,
+                appID: nil,
+                awsCredentialIdentityResolver: nil,
+                awsRetryMode: nil,
+                maxAttempts: nil,
+                requestChecksumCalculation: nil,
+                responseChecksumValidation: nil,
+                ignoreConfiguredEndpointURLs: nil,
+                region: nil,
+                signingRegion: nil,
+                endpointResolver: nil,
+                telemetryProvider: nil,
+                retryStrategyOptions: nil,
+                clientLogMode: nil,
+                endpoint: nil,
+                idempotencyTokenGenerator: nil,
+                httpClientEngine: nil,
+                httpClientConfiguration: nil,
+                authSchemes: nil,
+                authSchemePreference: nil,
+                authSchemeResolver: nil,
+                bearerTokenIdentityResolver: nil,
+                interceptorProviders: nil,
+                httpInterceptorProviders: nil
             )
         }
 
-        public convenience required init() async throws {
+        public init(region: Swift.String) throws {
+            try self.init(
+                useFIPS: nil,
+                useDualStack: nil,
+                appID: try AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
+                awsCredentialIdentityResolver: AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
+                awsRetryMode: try AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
+                maxAttempts: nil,
+                requestChecksumCalculation: try AWSClientConfigDefaultsProvider.requestChecksumCalculation(),
+                responseChecksumValidation: try AWSClientConfigDefaultsProvider.responseChecksumValidation(),
+                ignoreConfiguredEndpointURLs: nil,
+                region: region,
+                signingRegion: region,
+                endpointResolver: try DefaultEndpointResolver(),
+                telemetryProvider: ClientRuntime.DefaultTelemetry.provider,
+                retryStrategyOptions: try AWSClientConfigDefaultsProvider.retryStrategyOptions(),
+                clientLogMode: AWSClientConfigDefaultsProvider.clientLogMode(),
+                endpoint: nil,
+                idempotencyTokenGenerator: AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
+                httpClientEngine: AWSClientConfigDefaultsProvider.httpClientEngine(),
+                httpClientConfiguration: AWSClientConfigDefaultsProvider.httpClientConfiguration(),
+                authSchemes: [AWSSDKHTTPAuth.SigV4AuthScheme()],
+                authSchemePreference: nil,
+                authSchemeResolver: DefaultWorkSpacesAuthSchemeResolver(),
+                bearerTokenIdentityResolver: SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
+                interceptorProviders: [],
+                httpInterceptorProviders: []
+            )
+        }
+
+        public var partitionID: String? {
+            return "\(WorkSpacesClient.clientName) - \(region ?? "")"
+        }
+
+        public mutating func addInterceptorProvider(_ provider: ClientRuntime.InterceptorProvider) {
+            self._interceptorProviders.append(ClientRuntime.SendableInterceptorProviderBox(provider))
+        }
+
+        public mutating func addInterceptorProvider(_ provider: ClientRuntime.HttpInterceptorProvider) {
+            self._httpInterceptorProviders.append(ClientRuntime.SendableHttpInterceptorProviderBox(provider))
+        }
+
+    }
+
+    @available(*, deprecated, message: "Use WorkSpacesClientConfig instead. This class will be removed in a future version.")
+    public final class WorkSpacesClientConfiguration: AWSClientRuntime.AWSDefaultClientConfiguration & AWSClientRuntime.AWSRegionClientConfiguration & ClientRuntime.DefaultClientConfiguration & ClientRuntime.DefaultHttpClientConfiguration {
+        public var useFIPS: Swift.Bool?
+        public var useDualStack: Swift.Bool?
+        public var appID: Swift.String?
+        public var awsCredentialIdentityResolver: any SmithyIdentity.AWSCredentialIdentityResolver
+        public var awsRetryMode: AWSClientRuntime.AWSRetryMode
+        public var maxAttempts: Swift.Int?
+        public var requestChecksumCalculation: AWSSDKChecksums.AWSChecksumCalculationMode
+        public var responseChecksumValidation: AWSSDKChecksums.AWSChecksumCalculationMode
+        public var ignoreConfiguredEndpointURLs: Swift.Bool?
+        public var region: Swift.String?
+        public var signingRegion: Swift.String?
+        public var endpointResolver: EndpointResolver
+        public var telemetryProvider: ClientRuntime.TelemetryProvider
+        public var retryStrategyOptions: SmithyRetriesAPI.RetryStrategyOptions
+        public var clientLogMode: ClientRuntime.ClientLogMode
+        public var endpoint: Swift.String?
+        public var idempotencyTokenGenerator: ClientRuntime.IdempotencyTokenGenerator
+        public var httpClientEngine: SmithyHTTPAPI.HTTPClient
+        public var httpClientConfiguration: ClientRuntime.HttpClientConfiguration
+        public var authSchemes: SmithyHTTPAuthAPI.AuthSchemes?
+        public var authSchemePreference: [String]?
+        public var authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver
+        public var bearerTokenIdentityResolver: any SmithyIdentity.BearerTokenIdentityResolver
+        // Interceptor providers with Sendable-safe internal storage
+        private var _interceptorProviders: [ClientRuntime.SendableInterceptorProviderBox] = []
+        public var interceptorProviders: [ClientRuntime.InterceptorProvider] {
+            get {
+                return _interceptorProviders
+            }
+            set {
+                _interceptorProviders = newValue.map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            }
+        }
+
+        private var _httpInterceptorProviders: [ClientRuntime.SendableHttpInterceptorProviderBox] = []
+        public var httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider] {
+            get {
+                return _httpInterceptorProviders
+            }
+            set {
+                _httpInterceptorProviders = newValue.map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            }
+        }
+        public var logger: Smithy.LogAgent
+
+        public init(
+            useFIPS: Swift.Bool? = nil,
+            useDualStack: Swift.Bool? = nil,
+            appID: Swift.String? = nil,
+            awsCredentialIdentityResolver: (any SmithyIdentity.AWSCredentialIdentityResolver)? = nil,
+            awsRetryMode: AWSClientRuntime.AWSRetryMode? = nil,
+            maxAttempts: Swift.Int? = nil,
+            requestChecksumCalculation: AWSSDKChecksums.AWSChecksumCalculationMode? = nil,
+            responseChecksumValidation: AWSSDKChecksums.AWSChecksumCalculationMode? = nil,
+            ignoreConfiguredEndpointURLs: Swift.Bool? = nil,
+            region: Swift.String? = nil,
+            signingRegion: Swift.String? = nil,
+            endpointResolver: EndpointResolver? = nil,
+            telemetryProvider: ClientRuntime.TelemetryProvider? = nil,
+            retryStrategyOptions: SmithyRetriesAPI.RetryStrategyOptions? = nil,
+            clientLogMode: ClientRuntime.ClientLogMode? = nil,
+            endpoint: Swift.String? = nil,
+            idempotencyTokenGenerator: ClientRuntime.IdempotencyTokenGenerator? = nil,
+            httpClientEngine: SmithyHTTPAPI.HTTPClient? = nil,
+            httpClientConfiguration: ClientRuntime.HttpClientConfiguration? = nil,
+            authSchemes: SmithyHTTPAuthAPI.AuthSchemes? = nil,
+            authSchemePreference: [String]? = nil,
+            authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver? = nil,
+            bearerTokenIdentityResolver: (any SmithyIdentity.BearerTokenIdentityResolver)? = nil,
+            interceptorProviders: [ClientRuntime.InterceptorProvider]? = nil,
+            httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]? = nil
+        ) throws {
+            self.useFIPS = useFIPS
+            self.useDualStack = useDualStack
+            self.appID = try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID()
+            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain()
+            self.awsRetryMode = try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode()
+            self.maxAttempts = maxAttempts
+            self.requestChecksumCalculation = try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation)
+            self.responseChecksumValidation = try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation)
+            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
+            self.region = region
+            self.signingRegion = signingRegion
+            self.endpointResolver = try endpointResolver ?? DefaultEndpointResolver()
+            self.telemetryProvider = telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider
+            self.retryStrategyOptions = try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts)
+            self.clientLogMode = clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode()
+            self.endpoint = endpoint
+            self.idempotencyTokenGenerator = idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator()
+            self.httpClientEngine = httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration)
+            self.httpClientConfiguration = httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration()
+            self.authSchemes = authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()]
+            self.authSchemePreference = authSchemePreference ?? nil
+            self.authSchemeResolver = authSchemeResolver ?? DefaultWorkSpacesAuthSchemeResolver()
+            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: ""))
+            self._interceptorProviders = (interceptorProviders ?? []).map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            self._httpInterceptorProviders = (httpInterceptorProviders ?? []).map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            self.logger = (telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider).loggerProvider.getLogger(name: WorkSpacesClient.clientName)
+        }
+
+        public init(
+            useFIPS: Swift.Bool? = nil,
+            useDualStack: Swift.Bool? = nil,
+            appID: Swift.String? = nil,
+            awsCredentialIdentityResolver: (any SmithyIdentity.AWSCredentialIdentityResolver)? = nil,
+            awsRetryMode: AWSClientRuntime.AWSRetryMode? = nil,
+            maxAttempts: Swift.Int? = nil,
+            requestChecksumCalculation: AWSSDKChecksums.AWSChecksumCalculationMode? = nil,
+            responseChecksumValidation: AWSSDKChecksums.AWSChecksumCalculationMode? = nil,
+            ignoreConfiguredEndpointURLs: Swift.Bool? = nil,
+            region: Swift.String? = nil,
+            signingRegion: Swift.String? = nil,
+            endpointResolver: EndpointResolver? = nil,
+            telemetryProvider: ClientRuntime.TelemetryProvider? = nil,
+            retryStrategyOptions: SmithyRetriesAPI.RetryStrategyOptions? = nil,
+            clientLogMode: ClientRuntime.ClientLogMode? = nil,
+            endpoint: Swift.String? = nil,
+            idempotencyTokenGenerator: ClientRuntime.IdempotencyTokenGenerator? = nil,
+            httpClientEngine: SmithyHTTPAPI.HTTPClient? = nil,
+            httpClientConfiguration: ClientRuntime.HttpClientConfiguration? = nil,
+            authSchemes: SmithyHTTPAuthAPI.AuthSchemes? = nil,
+            authSchemePreference: [String]? = nil,
+            authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver? = nil,
+            bearerTokenIdentityResolver: (any SmithyIdentity.BearerTokenIdentityResolver)? = nil,
+            interceptorProviders: [ClientRuntime.InterceptorProvider]? = nil,
+            httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]? = nil
+        ) async throws {
+            self.useFIPS = useFIPS
+            self.useDualStack = useDualStack
+            self.appID = try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID()
+            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain()
+            self.awsRetryMode = try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode()
+            self.maxAttempts = maxAttempts
+            self.requestChecksumCalculation = try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation)
+            self.responseChecksumValidation = try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation)
+            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
+            self.region = try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region)
+            self.signingRegion = try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region)
+            self.endpointResolver = try endpointResolver ?? DefaultEndpointResolver()
+            self.telemetryProvider = telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider
+            self.retryStrategyOptions = try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts)
+            self.clientLogMode = clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode()
+            self.endpoint = endpoint
+            self.idempotencyTokenGenerator = idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator()
+            self.httpClientEngine = httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration)
+            self.httpClientConfiguration = httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration()
+            self.authSchemes = authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()]
+            self.authSchemePreference = authSchemePreference ?? nil
+            self.authSchemeResolver = authSchemeResolver ?? DefaultWorkSpacesAuthSchemeResolver()
+            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: ""))
+            self._interceptorProviders = (interceptorProviders ?? []).map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            self._httpInterceptorProviders = (httpInterceptorProviders ?? []).map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            self.logger = (telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider).loggerProvider.getLogger(name: WorkSpacesClient.clientName)
+        }
+
+        public convenience init() async throws {
             try await self.init(
                 useFIPS: nil,
                 useDualStack: nil,
@@ -316,32 +529,32 @@ extension WorkSpacesClient {
         }
 
         public convenience init(region: Swift.String) throws {
-            self.init(
-                nil,
-                nil,
-                try AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
-                AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
-                try AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
-                nil,
-                try AWSClientConfigDefaultsProvider.requestChecksumCalculation(),
-                try AWSClientConfigDefaultsProvider.responseChecksumValidation(),
-                nil,
-                region,
-                region,
-                try DefaultEndpointResolver(),
-                ClientRuntime.DefaultTelemetry.provider,
-                try AWSClientConfigDefaultsProvider.retryStrategyOptions(),
-                AWSClientConfigDefaultsProvider.clientLogMode(),
-                nil,
-                AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
-                AWSClientConfigDefaultsProvider.httpClientEngine(),
-                AWSClientConfigDefaultsProvider.httpClientConfiguration(),
-                [AWSSDKHTTPAuth.SigV4AuthScheme()],
-                nil,
-                DefaultWorkSpacesAuthSchemeResolver(),
-                SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
-                [],
-                []
+            try self.init(
+                useFIPS: nil,
+                useDualStack: nil,
+                appID: try AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
+                awsCredentialIdentityResolver: AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
+                awsRetryMode: try AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
+                maxAttempts: nil,
+                requestChecksumCalculation: try AWSClientConfigDefaultsProvider.requestChecksumCalculation(),
+                responseChecksumValidation: try AWSClientConfigDefaultsProvider.responseChecksumValidation(),
+                ignoreConfiguredEndpointURLs: nil,
+                region: region,
+                signingRegion: region,
+                endpointResolver: try DefaultEndpointResolver(),
+                telemetryProvider: ClientRuntime.DefaultTelemetry.provider,
+                retryStrategyOptions: try AWSClientConfigDefaultsProvider.retryStrategyOptions(),
+                clientLogMode: AWSClientConfigDefaultsProvider.clientLogMode(),
+                endpoint: nil,
+                idempotencyTokenGenerator: AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
+                httpClientEngine: AWSClientConfigDefaultsProvider.httpClientEngine(),
+                httpClientConfiguration: AWSClientConfigDefaultsProvider.httpClientConfiguration(),
+                authSchemes: [AWSSDKHTTPAuth.SigV4AuthScheme()],
+                authSchemePreference: nil,
+                authSchemeResolver: DefaultWorkSpacesAuthSchemeResolver(),
+                bearerTokenIdentityResolver: SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
+                interceptorProviders: [],
+                httpInterceptorProviders: []
             )
         }
 
@@ -349,12 +562,42 @@ extension WorkSpacesClient {
             return "\(WorkSpacesClient.clientName) - \(region ?? "")"
         }
 
+        public func toSendable() throws -> WorkSpacesClientConfig {
+            return try WorkSpacesClientConfig(
+                useFIPS: self.useFIPS,
+                useDualStack: self.useDualStack,
+                appID: self.appID,
+                awsCredentialIdentityResolver: self.awsCredentialIdentityResolver,
+                awsRetryMode: self.awsRetryMode,
+                maxAttempts: self.maxAttempts,
+                requestChecksumCalculation: self.requestChecksumCalculation,
+                responseChecksumValidation: self.responseChecksumValidation,
+                ignoreConfiguredEndpointURLs: self.ignoreConfiguredEndpointURLs,
+                region: self.region,
+                signingRegion: self.signingRegion,
+                endpointResolver: self.endpointResolver,
+                telemetryProvider: self.telemetryProvider,
+                retryStrategyOptions: self.retryStrategyOptions,
+                clientLogMode: self.clientLogMode,
+                endpoint: self.endpoint,
+                idempotencyTokenGenerator: self.idempotencyTokenGenerator,
+                httpClientEngine: self.httpClientEngine,
+                httpClientConfiguration: self.httpClientConfiguration,
+                authSchemes: self.authSchemes,
+                authSchemePreference: self.authSchemePreference,
+                authSchemeResolver: self.authSchemeResolver,
+                bearerTokenIdentityResolver: self.bearerTokenIdentityResolver,
+                interceptorProviders: self.interceptorProviders,
+                httpInterceptorProviders: self.httpInterceptorProviders
+            )
+        }
+
         public func addInterceptorProvider(_ provider: ClientRuntime.InterceptorProvider) {
-            self.interceptorProviders.append(provider)
+            self._interceptorProviders.append(ClientRuntime.SendableInterceptorProviderBox(provider))
         }
 
         public func addInterceptorProvider(_ provider: ClientRuntime.HttpInterceptorProvider) {
-            self.httpInterceptorProviders.append(provider)
+            self._httpInterceptorProviders.append(ClientRuntime.SendableHttpInterceptorProviderBox(provider))
         }
 
     }
@@ -420,7 +663,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<AcceptAccountLinkInvitationOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<AcceptAccountLinkInvitationInput, AcceptAccountLinkInvitationOutput>(xAmzTarget: "WorkspacesService.AcceptAccountLinkInvitation"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<AcceptAccountLinkInvitationInput, AcceptAccountLinkInvitationOutput>(overrides: ["X-Amz-Target": "WorkspacesService.AcceptAccountLinkInvitation"]))
         builder.serialize(ClientRuntime.BodyMiddleware<AcceptAccountLinkInvitationInput, AcceptAccountLinkInvitationOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: AcceptAccountLinkInvitationInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<AcceptAccountLinkInvitationInput, AcceptAccountLinkInvitationOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<AcceptAccountLinkInvitationOutput>())
@@ -494,7 +737,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<AssociateConnectionAliasOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<AssociateConnectionAliasInput, AssociateConnectionAliasOutput>(xAmzTarget: "WorkspacesService.AssociateConnectionAlias"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<AssociateConnectionAliasInput, AssociateConnectionAliasOutput>(overrides: ["X-Amz-Target": "WorkspacesService.AssociateConnectionAlias"]))
         builder.serialize(ClientRuntime.BodyMiddleware<AssociateConnectionAliasInput, AssociateConnectionAliasOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: AssociateConnectionAliasInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<AssociateConnectionAliasInput, AssociateConnectionAliasOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<AssociateConnectionAliasOutput>())
@@ -568,7 +811,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<AssociateIpGroupsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<AssociateIpGroupsInput, AssociateIpGroupsOutput>(xAmzTarget: "WorkspacesService.AssociateIpGroups"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<AssociateIpGroupsInput, AssociateIpGroupsOutput>(overrides: ["X-Amz-Target": "WorkspacesService.AssociateIpGroups"]))
         builder.serialize(ClientRuntime.BodyMiddleware<AssociateIpGroupsInput, AssociateIpGroupsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: AssociateIpGroupsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<AssociateIpGroupsInput, AssociateIpGroupsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<AssociateIpGroupsOutput>())
@@ -646,7 +889,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<AssociateWorkspaceApplicationOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<AssociateWorkspaceApplicationInput, AssociateWorkspaceApplicationOutput>(xAmzTarget: "WorkspacesService.AssociateWorkspaceApplication"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<AssociateWorkspaceApplicationInput, AssociateWorkspaceApplicationOutput>(overrides: ["X-Amz-Target": "WorkspacesService.AssociateWorkspaceApplication"]))
         builder.serialize(ClientRuntime.BodyMiddleware<AssociateWorkspaceApplicationInput, AssociateWorkspaceApplicationOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: AssociateWorkspaceApplicationInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<AssociateWorkspaceApplicationInput, AssociateWorkspaceApplicationOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<AssociateWorkspaceApplicationOutput>())
@@ -719,7 +962,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<AuthorizeIpRulesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<AuthorizeIpRulesInput, AuthorizeIpRulesOutput>(xAmzTarget: "WorkspacesService.AuthorizeIpRules"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<AuthorizeIpRulesInput, AuthorizeIpRulesOutput>(overrides: ["X-Amz-Target": "WorkspacesService.AuthorizeIpRules"]))
         builder.serialize(ClientRuntime.BodyMiddleware<AuthorizeIpRulesInput, AuthorizeIpRulesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: AuthorizeIpRulesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<AuthorizeIpRulesInput, AuthorizeIpRulesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<AuthorizeIpRulesOutput>())
@@ -794,7 +1037,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CopyWorkspaceImageOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CopyWorkspaceImageInput, CopyWorkspaceImageOutput>(xAmzTarget: "WorkspacesService.CopyWorkspaceImage"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CopyWorkspaceImageInput, CopyWorkspaceImageOutput>(overrides: ["X-Amz-Target": "WorkspacesService.CopyWorkspaceImage"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CopyWorkspaceImageInput, CopyWorkspaceImageOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CopyWorkspaceImageInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CopyWorkspaceImageInput, CopyWorkspaceImageOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CopyWorkspaceImageOutput>())
@@ -866,7 +1109,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateAccountLinkInvitationOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateAccountLinkInvitationInput, CreateAccountLinkInvitationOutput>(xAmzTarget: "WorkspacesService.CreateAccountLinkInvitation"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateAccountLinkInvitationInput, CreateAccountLinkInvitationOutput>(overrides: ["X-Amz-Target": "WorkspacesService.CreateAccountLinkInvitation"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateAccountLinkInvitationInput, CreateAccountLinkInvitationOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateAccountLinkInvitationInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateAccountLinkInvitationInput, CreateAccountLinkInvitationOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateAccountLinkInvitationOutput>())
@@ -939,7 +1182,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateConnectClientAddInOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateConnectClientAddInInput, CreateConnectClientAddInOutput>(xAmzTarget: "WorkspacesService.CreateConnectClientAddIn"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateConnectClientAddInInput, CreateConnectClientAddInOutput>(overrides: ["X-Amz-Target": "WorkspacesService.CreateConnectClientAddIn"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateConnectClientAddInInput, CreateConnectClientAddInOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateConnectClientAddInInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateConnectClientAddInInput, CreateConnectClientAddInOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateConnectClientAddInOutput>())
@@ -1013,7 +1256,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateConnectionAliasOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateConnectionAliasInput, CreateConnectionAliasOutput>(xAmzTarget: "WorkspacesService.CreateConnectionAlias"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateConnectionAliasInput, CreateConnectionAliasOutput>(overrides: ["X-Amz-Target": "WorkspacesService.CreateConnectionAlias"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateConnectionAliasInput, CreateConnectionAliasOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateConnectionAliasInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateConnectionAliasInput, CreateConnectionAliasOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateConnectionAliasOutput>())
@@ -1086,7 +1329,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateIpGroupOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateIpGroupInput, CreateIpGroupOutput>(xAmzTarget: "WorkspacesService.CreateIpGroup"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateIpGroupInput, CreateIpGroupOutput>(overrides: ["X-Amz-Target": "WorkspacesService.CreateIpGroup"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateIpGroupInput, CreateIpGroupOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateIpGroupInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateIpGroupInput, CreateIpGroupOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateIpGroupOutput>())
@@ -1159,7 +1402,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateStandbyWorkspacesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateStandbyWorkspacesInput, CreateStandbyWorkspacesOutput>(xAmzTarget: "WorkspacesService.CreateStandbyWorkspaces"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateStandbyWorkspacesInput, CreateStandbyWorkspacesOutput>(overrides: ["X-Amz-Target": "WorkspacesService.CreateStandbyWorkspaces"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateStandbyWorkspacesInput, CreateStandbyWorkspacesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateStandbyWorkspacesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateStandbyWorkspacesInput, CreateStandbyWorkspacesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateStandbyWorkspacesOutput>())
@@ -1230,7 +1473,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateTagsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateTagsInput, CreateTagsOutput>(xAmzTarget: "WorkspacesService.CreateTags"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateTagsInput, CreateTagsOutput>(overrides: ["X-Amz-Target": "WorkspacesService.CreateTags"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateTagsInput, CreateTagsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateTagsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateTagsInput, CreateTagsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateTagsOutput>())
@@ -1311,7 +1554,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateUpdatedWorkspaceImageOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateUpdatedWorkspaceImageInput, CreateUpdatedWorkspaceImageOutput>(xAmzTarget: "WorkspacesService.CreateUpdatedWorkspaceImage"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateUpdatedWorkspaceImageInput, CreateUpdatedWorkspaceImageOutput>(overrides: ["X-Amz-Target": "WorkspacesService.CreateUpdatedWorkspaceImage"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateUpdatedWorkspaceImageInput, CreateUpdatedWorkspaceImageOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateUpdatedWorkspaceImageInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateUpdatedWorkspaceImageInput, CreateUpdatedWorkspaceImageOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateUpdatedWorkspaceImageOutput>())
@@ -1385,7 +1628,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateWorkspaceBundleOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateWorkspaceBundleInput, CreateWorkspaceBundleOutput>(xAmzTarget: "WorkspacesService.CreateWorkspaceBundle"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateWorkspaceBundleInput, CreateWorkspaceBundleOutput>(overrides: ["X-Amz-Target": "WorkspacesService.CreateWorkspaceBundle"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateWorkspaceBundleInput, CreateWorkspaceBundleOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateWorkspaceBundleInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateWorkspaceBundleInput, CreateWorkspaceBundleOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateWorkspaceBundleOutput>())
@@ -1460,7 +1703,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateWorkspaceImageOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateWorkspaceImageInput, CreateWorkspaceImageOutput>(xAmzTarget: "WorkspacesService.CreateWorkspaceImage"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateWorkspaceImageInput, CreateWorkspaceImageOutput>(overrides: ["X-Amz-Target": "WorkspacesService.CreateWorkspaceImage"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateWorkspaceImageInput, CreateWorkspaceImageOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateWorkspaceImageInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateWorkspaceImageInput, CreateWorkspaceImageOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateWorkspaceImageOutput>())
@@ -1538,7 +1781,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateWorkspacesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateWorkspacesInput, CreateWorkspacesOutput>(xAmzTarget: "WorkspacesService.CreateWorkspaces"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateWorkspacesInput, CreateWorkspacesOutput>(overrides: ["X-Amz-Target": "WorkspacesService.CreateWorkspaces"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateWorkspacesInput, CreateWorkspacesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateWorkspacesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateWorkspacesInput, CreateWorkspacesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateWorkspacesOutput>())
@@ -1612,7 +1855,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateWorkspacesPoolOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateWorkspacesPoolInput, CreateWorkspacesPoolOutput>(xAmzTarget: "WorkspacesService.CreateWorkspacesPool"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateWorkspacesPoolInput, CreateWorkspacesPoolOutput>(overrides: ["X-Amz-Target": "WorkspacesService.CreateWorkspacesPool"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateWorkspacesPoolInput, CreateWorkspacesPoolOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateWorkspacesPoolInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateWorkspacesPoolInput, CreateWorkspacesPoolOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateWorkspacesPoolOutput>())
@@ -1685,7 +1928,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteAccountLinkInvitationOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteAccountLinkInvitationInput, DeleteAccountLinkInvitationOutput>(xAmzTarget: "WorkspacesService.DeleteAccountLinkInvitation"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteAccountLinkInvitationInput, DeleteAccountLinkInvitationOutput>(overrides: ["X-Amz-Target": "WorkspacesService.DeleteAccountLinkInvitation"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteAccountLinkInvitationInput, DeleteAccountLinkInvitationOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteAccountLinkInvitationInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteAccountLinkInvitationInput, DeleteAccountLinkInvitationOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteAccountLinkInvitationOutput>())
@@ -1756,7 +1999,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteClientBrandingOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteClientBrandingInput, DeleteClientBrandingOutput>(xAmzTarget: "WorkspacesService.DeleteClientBranding"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteClientBrandingInput, DeleteClientBrandingOutput>(overrides: ["X-Amz-Target": "WorkspacesService.DeleteClientBranding"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteClientBrandingInput, DeleteClientBrandingOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteClientBrandingInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteClientBrandingInput, DeleteClientBrandingOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteClientBrandingOutput>())
@@ -1827,7 +2070,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteConnectClientAddInOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteConnectClientAddInInput, DeleteConnectClientAddInOutput>(xAmzTarget: "WorkspacesService.DeleteConnectClientAddIn"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteConnectClientAddInInput, DeleteConnectClientAddInOutput>(overrides: ["X-Amz-Target": "WorkspacesService.DeleteConnectClientAddIn"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteConnectClientAddInInput, DeleteConnectClientAddInOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteConnectClientAddInInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteConnectClientAddInInput, DeleteConnectClientAddInOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteConnectClientAddInOutput>())
@@ -1901,7 +2144,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteConnectionAliasOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteConnectionAliasInput, DeleteConnectionAliasOutput>(xAmzTarget: "WorkspacesService.DeleteConnectionAlias"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteConnectionAliasInput, DeleteConnectionAliasOutput>(overrides: ["X-Amz-Target": "WorkspacesService.DeleteConnectionAlias"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteConnectionAliasInput, DeleteConnectionAliasOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteConnectionAliasInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteConnectionAliasInput, DeleteConnectionAliasOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteConnectionAliasOutput>())
@@ -1973,7 +2216,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteIpGroupOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteIpGroupInput, DeleteIpGroupOutput>(xAmzTarget: "WorkspacesService.DeleteIpGroup"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteIpGroupInput, DeleteIpGroupOutput>(overrides: ["X-Amz-Target": "WorkspacesService.DeleteIpGroup"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteIpGroupInput, DeleteIpGroupOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteIpGroupInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteIpGroupInput, DeleteIpGroupOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteIpGroupOutput>())
@@ -2043,7 +2286,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteTagsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteTagsInput, DeleteTagsOutput>(xAmzTarget: "WorkspacesService.DeleteTags"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteTagsInput, DeleteTagsOutput>(overrides: ["X-Amz-Target": "WorkspacesService.DeleteTags"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteTagsInput, DeleteTagsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteTagsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteTagsInput, DeleteTagsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteTagsOutput>())
@@ -2115,7 +2358,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteWorkspaceBundleOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteWorkspaceBundleInput, DeleteWorkspaceBundleOutput>(xAmzTarget: "WorkspacesService.DeleteWorkspaceBundle"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteWorkspaceBundleInput, DeleteWorkspaceBundleOutput>(overrides: ["X-Amz-Target": "WorkspacesService.DeleteWorkspaceBundle"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteWorkspaceBundleInput, DeleteWorkspaceBundleOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteWorkspaceBundleInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteWorkspaceBundleInput, DeleteWorkspaceBundleOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteWorkspaceBundleOutput>())
@@ -2186,7 +2429,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteWorkspaceImageOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteWorkspaceImageInput, DeleteWorkspaceImageOutput>(xAmzTarget: "WorkspacesService.DeleteWorkspaceImage"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteWorkspaceImageInput, DeleteWorkspaceImageOutput>(overrides: ["X-Amz-Target": "WorkspacesService.DeleteWorkspaceImage"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteWorkspaceImageInput, DeleteWorkspaceImageOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteWorkspaceImageInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteWorkspaceImageInput, DeleteWorkspaceImageOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteWorkspaceImageOutput>())
@@ -2260,7 +2503,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeployWorkspaceApplicationsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeployWorkspaceApplicationsInput, DeployWorkspaceApplicationsOutput>(xAmzTarget: "WorkspacesService.DeployWorkspaceApplications"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeployWorkspaceApplicationsInput, DeployWorkspaceApplicationsOutput>(overrides: ["X-Amz-Target": "WorkspacesService.DeployWorkspaceApplications"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeployWorkspaceApplicationsInput, DeployWorkspaceApplicationsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeployWorkspaceApplicationsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeployWorkspaceApplicationsInput, DeployWorkspaceApplicationsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeployWorkspaceApplicationsOutput>())
@@ -2333,7 +2576,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeregisterWorkspaceDirectoryOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeregisterWorkspaceDirectoryInput, DeregisterWorkspaceDirectoryOutput>(xAmzTarget: "WorkspacesService.DeregisterWorkspaceDirectory"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeregisterWorkspaceDirectoryInput, DeregisterWorkspaceDirectoryOutput>(overrides: ["X-Amz-Target": "WorkspacesService.DeregisterWorkspaceDirectory"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeregisterWorkspaceDirectoryInput, DeregisterWorkspaceDirectoryOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeregisterWorkspaceDirectoryInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeregisterWorkspaceDirectoryInput, DeregisterWorkspaceDirectoryOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeregisterWorkspaceDirectoryOutput>())
@@ -2402,7 +2645,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeAccountOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeAccountInput, DescribeAccountOutput>(xAmzTarget: "WorkspacesService.DescribeAccount"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeAccountInput, DescribeAccountOutput>(overrides: ["X-Amz-Target": "WorkspacesService.DescribeAccount"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeAccountInput, DescribeAccountOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeAccountInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeAccountInput, DescribeAccountOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeAccountOutput>())
@@ -2471,7 +2714,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeAccountModificationsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeAccountModificationsInput, DescribeAccountModificationsOutput>(xAmzTarget: "WorkspacesService.DescribeAccountModifications"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeAccountModificationsInput, DescribeAccountModificationsOutput>(overrides: ["X-Amz-Target": "WorkspacesService.DescribeAccountModifications"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeAccountModificationsInput, DescribeAccountModificationsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeAccountModificationsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeAccountModificationsInput, DescribeAccountModificationsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeAccountModificationsOutput>())
@@ -2543,7 +2786,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeApplicationAssociationsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeApplicationAssociationsInput, DescribeApplicationAssociationsOutput>(xAmzTarget: "WorkspacesService.DescribeApplicationAssociations"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeApplicationAssociationsInput, DescribeApplicationAssociationsOutput>(overrides: ["X-Amz-Target": "WorkspacesService.DescribeApplicationAssociations"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeApplicationAssociationsInput, DescribeApplicationAssociationsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeApplicationAssociationsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeApplicationAssociationsInput, DescribeApplicationAssociationsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeApplicationAssociationsOutput>())
@@ -2615,7 +2858,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeApplicationsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeApplicationsInput, DescribeApplicationsOutput>(xAmzTarget: "WorkspacesService.DescribeApplications"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeApplicationsInput, DescribeApplicationsOutput>(overrides: ["X-Amz-Target": "WorkspacesService.DescribeApplications"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeApplicationsInput, DescribeApplicationsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeApplicationsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeApplicationsInput, DescribeApplicationsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeApplicationsOutput>())
@@ -2687,7 +2930,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeBundleAssociationsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeBundleAssociationsInput, DescribeBundleAssociationsOutput>(xAmzTarget: "WorkspacesService.DescribeBundleAssociations"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeBundleAssociationsInput, DescribeBundleAssociationsOutput>(overrides: ["X-Amz-Target": "WorkspacesService.DescribeBundleAssociations"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeBundleAssociationsInput, DescribeBundleAssociationsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeBundleAssociationsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeBundleAssociationsInput, DescribeBundleAssociationsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeBundleAssociationsOutput>())
@@ -2758,7 +3001,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeClientBrandingOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeClientBrandingInput, DescribeClientBrandingOutput>(xAmzTarget: "WorkspacesService.DescribeClientBranding"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeClientBrandingInput, DescribeClientBrandingOutput>(overrides: ["X-Amz-Target": "WorkspacesService.DescribeClientBranding"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeClientBrandingInput, DescribeClientBrandingOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeClientBrandingInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeClientBrandingInput, DescribeClientBrandingOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeClientBrandingOutput>())
@@ -2829,7 +3072,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeClientPropertiesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeClientPropertiesInput, DescribeClientPropertiesOutput>(xAmzTarget: "WorkspacesService.DescribeClientProperties"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeClientPropertiesInput, DescribeClientPropertiesOutput>(overrides: ["X-Amz-Target": "WorkspacesService.DescribeClientProperties"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeClientPropertiesInput, DescribeClientPropertiesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeClientPropertiesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeClientPropertiesInput, DescribeClientPropertiesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeClientPropertiesOutput>())
@@ -2900,7 +3143,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeConnectClientAddInsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeConnectClientAddInsInput, DescribeConnectClientAddInsOutput>(xAmzTarget: "WorkspacesService.DescribeConnectClientAddIns"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeConnectClientAddInsInput, DescribeConnectClientAddInsOutput>(overrides: ["X-Amz-Target": "WorkspacesService.DescribeConnectClientAddIns"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeConnectClientAddInsInput, DescribeConnectClientAddInsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeConnectClientAddInsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeConnectClientAddInsInput, DescribeConnectClientAddInsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeConnectClientAddInsOutput>())
@@ -2972,7 +3215,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeConnectionAliasPermissionsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeConnectionAliasPermissionsInput, DescribeConnectionAliasPermissionsOutput>(xAmzTarget: "WorkspacesService.DescribeConnectionAliasPermissions"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeConnectionAliasPermissionsInput, DescribeConnectionAliasPermissionsOutput>(overrides: ["X-Amz-Target": "WorkspacesService.DescribeConnectionAliasPermissions"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeConnectionAliasPermissionsInput, DescribeConnectionAliasPermissionsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeConnectionAliasPermissionsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeConnectionAliasPermissionsInput, DescribeConnectionAliasPermissionsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeConnectionAliasPermissionsOutput>())
@@ -3043,7 +3286,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeConnectionAliasesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeConnectionAliasesInput, DescribeConnectionAliasesOutput>(xAmzTarget: "WorkspacesService.DescribeConnectionAliases"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeConnectionAliasesInput, DescribeConnectionAliasesOutput>(overrides: ["X-Amz-Target": "WorkspacesService.DescribeConnectionAliases"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeConnectionAliasesInput, DescribeConnectionAliasesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeConnectionAliasesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeConnectionAliasesInput, DescribeConnectionAliasesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeConnectionAliasesOutput>())
@@ -3113,7 +3356,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeCustomWorkspaceImageImportOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeCustomWorkspaceImageImportInput, DescribeCustomWorkspaceImageImportOutput>(xAmzTarget: "WorkspacesService.DescribeCustomWorkspaceImageImport"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeCustomWorkspaceImageImportInput, DescribeCustomWorkspaceImageImportOutput>(overrides: ["X-Amz-Target": "WorkspacesService.DescribeCustomWorkspaceImageImport"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeCustomWorkspaceImageImportInput, DescribeCustomWorkspaceImageImportOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeCustomWorkspaceImageImportInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeCustomWorkspaceImageImportInput, DescribeCustomWorkspaceImageImportOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeCustomWorkspaceImageImportOutput>())
@@ -3185,7 +3428,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeImageAssociationsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeImageAssociationsInput, DescribeImageAssociationsOutput>(xAmzTarget: "WorkspacesService.DescribeImageAssociations"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeImageAssociationsInput, DescribeImageAssociationsOutput>(overrides: ["X-Amz-Target": "WorkspacesService.DescribeImageAssociations"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeImageAssociationsInput, DescribeImageAssociationsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeImageAssociationsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeImageAssociationsInput, DescribeImageAssociationsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeImageAssociationsOutput>())
@@ -3255,7 +3498,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeIpGroupsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeIpGroupsInput, DescribeIpGroupsOutput>(xAmzTarget: "WorkspacesService.DescribeIpGroups"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeIpGroupsInput, DescribeIpGroupsOutput>(overrides: ["X-Amz-Target": "WorkspacesService.DescribeIpGroups"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeIpGroupsInput, DescribeIpGroupsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeIpGroupsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeIpGroupsInput, DescribeIpGroupsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeIpGroupsOutput>())
@@ -3324,7 +3567,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeTagsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeTagsInput, DescribeTagsOutput>(xAmzTarget: "WorkspacesService.DescribeTags"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeTagsInput, DescribeTagsOutput>(overrides: ["X-Amz-Target": "WorkspacesService.DescribeTags"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeTagsInput, DescribeTagsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeTagsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeTagsInput, DescribeTagsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeTagsOutput>())
@@ -3396,7 +3639,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeWorkspaceAssociationsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeWorkspaceAssociationsInput, DescribeWorkspaceAssociationsOutput>(xAmzTarget: "WorkspacesService.DescribeWorkspaceAssociations"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeWorkspaceAssociationsInput, DescribeWorkspaceAssociationsOutput>(overrides: ["X-Amz-Target": "WorkspacesService.DescribeWorkspaceAssociations"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeWorkspaceAssociationsInput, DescribeWorkspaceAssociationsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeWorkspaceAssociationsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeWorkspaceAssociationsInput, DescribeWorkspaceAssociationsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeWorkspaceAssociationsOutput>())
@@ -3465,7 +3708,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeWorkspaceBundlesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeWorkspaceBundlesInput, DescribeWorkspaceBundlesOutput>(xAmzTarget: "WorkspacesService.DescribeWorkspaceBundles"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeWorkspaceBundlesInput, DescribeWorkspaceBundlesOutput>(overrides: ["X-Amz-Target": "WorkspacesService.DescribeWorkspaceBundles"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeWorkspaceBundlesInput, DescribeWorkspaceBundlesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeWorkspaceBundlesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeWorkspaceBundlesInput, DescribeWorkspaceBundlesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeWorkspaceBundlesOutput>())
@@ -3534,7 +3777,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeWorkspaceDirectoriesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeWorkspaceDirectoriesInput, DescribeWorkspaceDirectoriesOutput>(xAmzTarget: "WorkspacesService.DescribeWorkspaceDirectories"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeWorkspaceDirectoriesInput, DescribeWorkspaceDirectoriesOutput>(overrides: ["X-Amz-Target": "WorkspacesService.DescribeWorkspaceDirectories"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeWorkspaceDirectoriesInput, DescribeWorkspaceDirectoriesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeWorkspaceDirectoriesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeWorkspaceDirectoriesInput, DescribeWorkspaceDirectoriesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeWorkspaceDirectoriesOutput>())
@@ -3605,7 +3848,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeWorkspaceImagePermissionsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeWorkspaceImagePermissionsInput, DescribeWorkspaceImagePermissionsOutput>(xAmzTarget: "WorkspacesService.DescribeWorkspaceImagePermissions"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeWorkspaceImagePermissionsInput, DescribeWorkspaceImagePermissionsOutput>(overrides: ["X-Amz-Target": "WorkspacesService.DescribeWorkspaceImagePermissions"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeWorkspaceImagePermissionsInput, DescribeWorkspaceImagePermissionsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeWorkspaceImagePermissionsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeWorkspaceImagePermissionsInput, DescribeWorkspaceImagePermissionsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeWorkspaceImagePermissionsOutput>())
@@ -3674,7 +3917,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeWorkspaceImagesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeWorkspaceImagesInput, DescribeWorkspaceImagesOutput>(xAmzTarget: "WorkspacesService.DescribeWorkspaceImages"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeWorkspaceImagesInput, DescribeWorkspaceImagesOutput>(overrides: ["X-Amz-Target": "WorkspacesService.DescribeWorkspaceImages"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeWorkspaceImagesInput, DescribeWorkspaceImagesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeWorkspaceImagesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeWorkspaceImagesInput, DescribeWorkspaceImagesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeWorkspaceImagesOutput>())
@@ -3745,7 +3988,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeWorkspaceSnapshotsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeWorkspaceSnapshotsInput, DescribeWorkspaceSnapshotsOutput>(xAmzTarget: "WorkspacesService.DescribeWorkspaceSnapshots"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeWorkspaceSnapshotsInput, DescribeWorkspaceSnapshotsOutput>(overrides: ["X-Amz-Target": "WorkspacesService.DescribeWorkspaceSnapshots"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeWorkspaceSnapshotsInput, DescribeWorkspaceSnapshotsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeWorkspaceSnapshotsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeWorkspaceSnapshotsInput, DescribeWorkspaceSnapshotsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeWorkspaceSnapshotsOutput>())
@@ -3815,7 +4058,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeWorkspacesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeWorkspacesInput, DescribeWorkspacesOutput>(xAmzTarget: "WorkspacesService.DescribeWorkspaces"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeWorkspacesInput, DescribeWorkspacesOutput>(overrides: ["X-Amz-Target": "WorkspacesService.DescribeWorkspaces"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeWorkspacesInput, DescribeWorkspacesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeWorkspacesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeWorkspacesInput, DescribeWorkspacesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeWorkspacesOutput>())
@@ -3884,7 +4127,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeWorkspacesConnectionStatusOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeWorkspacesConnectionStatusInput, DescribeWorkspacesConnectionStatusOutput>(xAmzTarget: "WorkspacesService.DescribeWorkspacesConnectionStatus"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeWorkspacesConnectionStatusInput, DescribeWorkspacesConnectionStatusOutput>(overrides: ["X-Amz-Target": "WorkspacesService.DescribeWorkspacesConnectionStatus"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeWorkspacesConnectionStatusInput, DescribeWorkspacesConnectionStatusOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeWorkspacesConnectionStatusInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeWorkspacesConnectionStatusInput, DescribeWorkspacesConnectionStatusOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeWorkspacesConnectionStatusOutput>())
@@ -3955,7 +4198,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeWorkspacesPoolSessionsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeWorkspacesPoolSessionsInput, DescribeWorkspacesPoolSessionsOutput>(xAmzTarget: "WorkspacesService.DescribeWorkspacesPoolSessions"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeWorkspacesPoolSessionsInput, DescribeWorkspacesPoolSessionsOutput>(overrides: ["X-Amz-Target": "WorkspacesService.DescribeWorkspacesPoolSessions"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeWorkspacesPoolSessionsInput, DescribeWorkspacesPoolSessionsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeWorkspacesPoolSessionsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeWorkspacesPoolSessionsInput, DescribeWorkspacesPoolSessionsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeWorkspacesPoolSessionsOutput>())
@@ -4026,7 +4269,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeWorkspacesPoolsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeWorkspacesPoolsInput, DescribeWorkspacesPoolsOutput>(xAmzTarget: "WorkspacesService.DescribeWorkspacesPools"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeWorkspacesPoolsInput, DescribeWorkspacesPoolsOutput>(overrides: ["X-Amz-Target": "WorkspacesService.DescribeWorkspacesPools"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeWorkspacesPoolsInput, DescribeWorkspacesPoolsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeWorkspacesPoolsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeWorkspacesPoolsInput, DescribeWorkspacesPoolsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeWorkspacesPoolsOutput>())
@@ -4099,7 +4342,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DisassociateConnectionAliasOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DisassociateConnectionAliasInput, DisassociateConnectionAliasOutput>(xAmzTarget: "WorkspacesService.DisassociateConnectionAlias"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DisassociateConnectionAliasInput, DisassociateConnectionAliasOutput>(overrides: ["X-Amz-Target": "WorkspacesService.DisassociateConnectionAlias"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DisassociateConnectionAliasInput, DisassociateConnectionAliasOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DisassociateConnectionAliasInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DisassociateConnectionAliasInput, DisassociateConnectionAliasOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DisassociateConnectionAliasOutput>())
@@ -4172,7 +4415,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DisassociateIpGroupsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DisassociateIpGroupsInput, DisassociateIpGroupsOutput>(xAmzTarget: "WorkspacesService.DisassociateIpGroups"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DisassociateIpGroupsInput, DisassociateIpGroupsOutput>(overrides: ["X-Amz-Target": "WorkspacesService.DisassociateIpGroups"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DisassociateIpGroupsInput, DisassociateIpGroupsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DisassociateIpGroupsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DisassociateIpGroupsInput, DisassociateIpGroupsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DisassociateIpGroupsOutput>())
@@ -4245,7 +4488,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DisassociateWorkspaceApplicationOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DisassociateWorkspaceApplicationInput, DisassociateWorkspaceApplicationOutput>(xAmzTarget: "WorkspacesService.DisassociateWorkspaceApplication"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DisassociateWorkspaceApplicationInput, DisassociateWorkspaceApplicationOutput>(overrides: ["X-Amz-Target": "WorkspacesService.DisassociateWorkspaceApplication"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DisassociateWorkspaceApplicationInput, DisassociateWorkspaceApplicationOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DisassociateWorkspaceApplicationInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DisassociateWorkspaceApplicationInput, DisassociateWorkspaceApplicationOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DisassociateWorkspaceApplicationOutput>())
@@ -4317,7 +4560,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetAccountLinkOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetAccountLinkInput, GetAccountLinkOutput>(xAmzTarget: "WorkspacesService.GetAccountLink"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetAccountLinkInput, GetAccountLinkOutput>(overrides: ["X-Amz-Target": "WorkspacesService.GetAccountLink"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetAccountLinkInput, GetAccountLinkOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetAccountLinkInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetAccountLinkInput, GetAccountLinkOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetAccountLinkOutput>())
@@ -4397,7 +4640,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ImportClientBrandingOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ImportClientBrandingInput, ImportClientBrandingOutput>(xAmzTarget: "WorkspacesService.ImportClientBranding"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ImportClientBrandingInput, ImportClientBrandingOutput>(overrides: ["X-Amz-Target": "WorkspacesService.ImportClientBranding"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ImportClientBrandingInput, ImportClientBrandingOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ImportClientBrandingInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ImportClientBrandingInput, ImportClientBrandingOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ImportClientBrandingOutput>())
@@ -4471,7 +4714,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ImportCustomWorkspaceImageOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ImportCustomWorkspaceImageInput, ImportCustomWorkspaceImageOutput>(xAmzTarget: "WorkspacesService.ImportCustomWorkspaceImage"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ImportCustomWorkspaceImageInput, ImportCustomWorkspaceImageOutput>(overrides: ["X-Amz-Target": "WorkspacesService.ImportCustomWorkspaceImage"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ImportCustomWorkspaceImageInput, ImportCustomWorkspaceImageOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ImportCustomWorkspaceImageInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ImportCustomWorkspaceImageInput, ImportCustomWorkspaceImageOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ImportCustomWorkspaceImageOutput>())
@@ -4545,7 +4788,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ImportWorkspaceImageOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ImportWorkspaceImageInput, ImportWorkspaceImageOutput>(xAmzTarget: "WorkspacesService.ImportWorkspaceImage"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ImportWorkspaceImageInput, ImportWorkspaceImageOutput>(overrides: ["X-Amz-Target": "WorkspacesService.ImportWorkspaceImage"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ImportWorkspaceImageInput, ImportWorkspaceImageOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ImportWorkspaceImageInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ImportWorkspaceImageInput, ImportWorkspaceImageOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ImportWorkspaceImageOutput>())
@@ -4616,7 +4859,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListAccountLinksOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListAccountLinksInput, ListAccountLinksOutput>(xAmzTarget: "WorkspacesService.ListAccountLinks"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListAccountLinksInput, ListAccountLinksOutput>(overrides: ["X-Amz-Target": "WorkspacesService.ListAccountLinks"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListAccountLinksInput, ListAccountLinksOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListAccountLinksInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListAccountLinksInput, ListAccountLinksOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListAccountLinksOutput>())
@@ -4686,7 +4929,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListAvailableManagementCidrRangesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListAvailableManagementCidrRangesInput, ListAvailableManagementCidrRangesOutput>(xAmzTarget: "WorkspacesService.ListAvailableManagementCidrRanges"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListAvailableManagementCidrRangesInput, ListAvailableManagementCidrRangesOutput>(overrides: ["X-Amz-Target": "WorkspacesService.ListAvailableManagementCidrRanges"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListAvailableManagementCidrRangesInput, ListAvailableManagementCidrRangesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListAvailableManagementCidrRangesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListAvailableManagementCidrRangesInput, ListAvailableManagementCidrRangesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListAvailableManagementCidrRangesOutput>())
@@ -4760,7 +5003,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<MigrateWorkspaceOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<MigrateWorkspaceInput, MigrateWorkspaceOutput>(xAmzTarget: "WorkspacesService.MigrateWorkspace"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<MigrateWorkspaceInput, MigrateWorkspaceOutput>(overrides: ["X-Amz-Target": "WorkspacesService.MigrateWorkspace"]))
         builder.serialize(ClientRuntime.BodyMiddleware<MigrateWorkspaceInput, MigrateWorkspaceOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: MigrateWorkspaceInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<MigrateWorkspaceInput, MigrateWorkspaceOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<MigrateWorkspaceOutput>())
@@ -4833,7 +5076,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ModifyAccountOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ModifyAccountInput, ModifyAccountOutput>(xAmzTarget: "WorkspacesService.ModifyAccount"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ModifyAccountInput, ModifyAccountOutput>(overrides: ["X-Amz-Target": "WorkspacesService.ModifyAccount"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ModifyAccountInput, ModifyAccountOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ModifyAccountInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ModifyAccountInput, ModifyAccountOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ModifyAccountOutput>())
@@ -4905,7 +5148,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ModifyCertificateBasedAuthPropertiesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ModifyCertificateBasedAuthPropertiesInput, ModifyCertificateBasedAuthPropertiesOutput>(xAmzTarget: "WorkspacesService.ModifyCertificateBasedAuthProperties"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ModifyCertificateBasedAuthPropertiesInput, ModifyCertificateBasedAuthPropertiesOutput>(overrides: ["X-Amz-Target": "WorkspacesService.ModifyCertificateBasedAuthProperties"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ModifyCertificateBasedAuthPropertiesInput, ModifyCertificateBasedAuthPropertiesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ModifyCertificateBasedAuthPropertiesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ModifyCertificateBasedAuthPropertiesInput, ModifyCertificateBasedAuthPropertiesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ModifyCertificateBasedAuthPropertiesOutput>())
@@ -4977,7 +5220,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ModifyClientPropertiesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ModifyClientPropertiesInput, ModifyClientPropertiesOutput>(xAmzTarget: "WorkspacesService.ModifyClientProperties"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ModifyClientPropertiesInput, ModifyClientPropertiesOutput>(overrides: ["X-Amz-Target": "WorkspacesService.ModifyClientProperties"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ModifyClientPropertiesInput, ModifyClientPropertiesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ModifyClientPropertiesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ModifyClientPropertiesInput, ModifyClientPropertiesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ModifyClientPropertiesOutput>())
@@ -5048,7 +5291,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ModifyEndpointEncryptionModeOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ModifyEndpointEncryptionModeInput, ModifyEndpointEncryptionModeOutput>(xAmzTarget: "WorkspacesService.ModifyEndpointEncryptionMode"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ModifyEndpointEncryptionModeInput, ModifyEndpointEncryptionModeOutput>(overrides: ["X-Amz-Target": "WorkspacesService.ModifyEndpointEncryptionMode"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ModifyEndpointEncryptionModeInput, ModifyEndpointEncryptionModeOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ModifyEndpointEncryptionModeInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ModifyEndpointEncryptionModeInput, ModifyEndpointEncryptionModeOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ModifyEndpointEncryptionModeOutput>())
@@ -5120,7 +5363,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ModifySamlPropertiesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ModifySamlPropertiesInput, ModifySamlPropertiesOutput>(xAmzTarget: "WorkspacesService.ModifySamlProperties"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ModifySamlPropertiesInput, ModifySamlPropertiesOutput>(overrides: ["X-Amz-Target": "WorkspacesService.ModifySamlProperties"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ModifySamlPropertiesInput, ModifySamlPropertiesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ModifySamlPropertiesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ModifySamlPropertiesInput, ModifySamlPropertiesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ModifySamlPropertiesOutput>())
@@ -5192,7 +5435,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ModifySelfservicePermissionsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ModifySelfservicePermissionsInput, ModifySelfservicePermissionsOutput>(xAmzTarget: "WorkspacesService.ModifySelfservicePermissions"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ModifySelfservicePermissionsInput, ModifySelfservicePermissionsOutput>(overrides: ["X-Amz-Target": "WorkspacesService.ModifySelfservicePermissions"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ModifySelfservicePermissionsInput, ModifySelfservicePermissionsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ModifySelfservicePermissionsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ModifySelfservicePermissionsInput, ModifySelfservicePermissionsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ModifySelfservicePermissionsOutput>())
@@ -5264,7 +5507,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ModifyStreamingPropertiesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ModifyStreamingPropertiesInput, ModifyStreamingPropertiesOutput>(xAmzTarget: "WorkspacesService.ModifyStreamingProperties"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ModifyStreamingPropertiesInput, ModifyStreamingPropertiesOutput>(overrides: ["X-Amz-Target": "WorkspacesService.ModifyStreamingProperties"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ModifyStreamingPropertiesInput, ModifyStreamingPropertiesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ModifyStreamingPropertiesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ModifyStreamingPropertiesInput, ModifyStreamingPropertiesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ModifyStreamingPropertiesOutput>())
@@ -5337,7 +5580,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ModifyWorkspaceAccessPropertiesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ModifyWorkspaceAccessPropertiesInput, ModifyWorkspaceAccessPropertiesOutput>(xAmzTarget: "WorkspacesService.ModifyWorkspaceAccessProperties"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ModifyWorkspaceAccessPropertiesInput, ModifyWorkspaceAccessPropertiesOutput>(overrides: ["X-Amz-Target": "WorkspacesService.ModifyWorkspaceAccessProperties"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ModifyWorkspaceAccessPropertiesInput, ModifyWorkspaceAccessPropertiesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ModifyWorkspaceAccessPropertiesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ModifyWorkspaceAccessPropertiesInput, ModifyWorkspaceAccessPropertiesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ModifyWorkspaceAccessPropertiesOutput>())
@@ -5409,7 +5652,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ModifyWorkspaceCreationPropertiesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ModifyWorkspaceCreationPropertiesInput, ModifyWorkspaceCreationPropertiesOutput>(xAmzTarget: "WorkspacesService.ModifyWorkspaceCreationProperties"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ModifyWorkspaceCreationPropertiesInput, ModifyWorkspaceCreationPropertiesOutput>(overrides: ["X-Amz-Target": "WorkspacesService.ModifyWorkspaceCreationProperties"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ModifyWorkspaceCreationPropertiesInput, ModifyWorkspaceCreationPropertiesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ModifyWorkspaceCreationPropertiesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ModifyWorkspaceCreationPropertiesInput, ModifyWorkspaceCreationPropertiesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ModifyWorkspaceCreationPropertiesOutput>())
@@ -5487,7 +5730,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ModifyWorkspacePropertiesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ModifyWorkspacePropertiesInput, ModifyWorkspacePropertiesOutput>(xAmzTarget: "WorkspacesService.ModifyWorkspaceProperties"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ModifyWorkspacePropertiesInput, ModifyWorkspacePropertiesOutput>(overrides: ["X-Amz-Target": "WorkspacesService.ModifyWorkspaceProperties"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ModifyWorkspacePropertiesInput, ModifyWorkspacePropertiesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ModifyWorkspacePropertiesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ModifyWorkspacePropertiesInput, ModifyWorkspacePropertiesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ModifyWorkspacePropertiesOutput>())
@@ -5559,7 +5802,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ModifyWorkspaceStateOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ModifyWorkspaceStateInput, ModifyWorkspaceStateOutput>(xAmzTarget: "WorkspacesService.ModifyWorkspaceState"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ModifyWorkspaceStateInput, ModifyWorkspaceStateOutput>(overrides: ["X-Amz-Target": "WorkspacesService.ModifyWorkspaceState"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ModifyWorkspaceStateInput, ModifyWorkspaceStateOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ModifyWorkspaceStateInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ModifyWorkspaceStateInput, ModifyWorkspaceStateOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ModifyWorkspaceStateOutput>())
@@ -5628,7 +5871,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<RebootWorkspacesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<RebootWorkspacesInput, RebootWorkspacesOutput>(xAmzTarget: "WorkspacesService.RebootWorkspaces"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<RebootWorkspacesInput, RebootWorkspacesOutput>(overrides: ["X-Amz-Target": "WorkspacesService.RebootWorkspaces"]))
         builder.serialize(ClientRuntime.BodyMiddleware<RebootWorkspacesInput, RebootWorkspacesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: RebootWorkspacesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<RebootWorkspacesInput, RebootWorkspacesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<RebootWorkspacesOutput>())
@@ -5697,7 +5940,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<RebuildWorkspacesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<RebuildWorkspacesInput, RebuildWorkspacesOutput>(xAmzTarget: "WorkspacesService.RebuildWorkspaces"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<RebuildWorkspacesInput, RebuildWorkspacesOutput>(overrides: ["X-Amz-Target": "WorkspacesService.RebuildWorkspaces"]))
         builder.serialize(ClientRuntime.BodyMiddleware<RebuildWorkspacesInput, RebuildWorkspacesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: RebuildWorkspacesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<RebuildWorkspacesInput, RebuildWorkspacesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<RebuildWorkspacesOutput>())
@@ -5774,7 +6017,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<RegisterWorkspaceDirectoryOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<RegisterWorkspaceDirectoryInput, RegisterWorkspaceDirectoryOutput>(xAmzTarget: "WorkspacesService.RegisterWorkspaceDirectory"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<RegisterWorkspaceDirectoryInput, RegisterWorkspaceDirectoryOutput>(overrides: ["X-Amz-Target": "WorkspacesService.RegisterWorkspaceDirectory"]))
         builder.serialize(ClientRuntime.BodyMiddleware<RegisterWorkspaceDirectoryInput, RegisterWorkspaceDirectoryOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: RegisterWorkspaceDirectoryInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<RegisterWorkspaceDirectoryInput, RegisterWorkspaceDirectoryOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<RegisterWorkspaceDirectoryOutput>())
@@ -5847,7 +6090,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<RejectAccountLinkInvitationOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<RejectAccountLinkInvitationInput, RejectAccountLinkInvitationOutput>(xAmzTarget: "WorkspacesService.RejectAccountLinkInvitation"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<RejectAccountLinkInvitationInput, RejectAccountLinkInvitationOutput>(overrides: ["X-Amz-Target": "WorkspacesService.RejectAccountLinkInvitation"]))
         builder.serialize(ClientRuntime.BodyMiddleware<RejectAccountLinkInvitationInput, RejectAccountLinkInvitationOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: RejectAccountLinkInvitationInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<RejectAccountLinkInvitationInput, RejectAccountLinkInvitationOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<RejectAccountLinkInvitationOutput>())
@@ -5919,7 +6162,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<RestoreWorkspaceOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<RestoreWorkspaceInput, RestoreWorkspaceOutput>(xAmzTarget: "WorkspacesService.RestoreWorkspace"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<RestoreWorkspaceInput, RestoreWorkspaceOutput>(overrides: ["X-Amz-Target": "WorkspacesService.RestoreWorkspace"]))
         builder.serialize(ClientRuntime.BodyMiddleware<RestoreWorkspaceInput, RestoreWorkspaceOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: RestoreWorkspaceInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<RestoreWorkspaceInput, RestoreWorkspaceOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<RestoreWorkspaceOutput>())
@@ -5991,7 +6234,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<RevokeIpRulesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<RevokeIpRulesInput, RevokeIpRulesOutput>(xAmzTarget: "WorkspacesService.RevokeIpRules"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<RevokeIpRulesInput, RevokeIpRulesOutput>(overrides: ["X-Amz-Target": "WorkspacesService.RevokeIpRules"]))
         builder.serialize(ClientRuntime.BodyMiddleware<RevokeIpRulesInput, RevokeIpRulesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: RevokeIpRulesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<RevokeIpRulesInput, RevokeIpRulesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<RevokeIpRulesOutput>())
@@ -6055,7 +6298,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<StartWorkspacesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<StartWorkspacesInput, StartWorkspacesOutput>(xAmzTarget: "WorkspacesService.StartWorkspaces"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<StartWorkspacesInput, StartWorkspacesOutput>(overrides: ["X-Amz-Target": "WorkspacesService.StartWorkspaces"]))
         builder.serialize(ClientRuntime.BodyMiddleware<StartWorkspacesInput, StartWorkspacesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: StartWorkspacesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<StartWorkspacesInput, StartWorkspacesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<StartWorkspacesOutput>())
@@ -6130,7 +6373,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<StartWorkspacesPoolOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<StartWorkspacesPoolInput, StartWorkspacesPoolOutput>(xAmzTarget: "WorkspacesService.StartWorkspacesPool"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<StartWorkspacesPoolInput, StartWorkspacesPoolOutput>(overrides: ["X-Amz-Target": "WorkspacesService.StartWorkspacesPool"]))
         builder.serialize(ClientRuntime.BodyMiddleware<StartWorkspacesPoolInput, StartWorkspacesPoolOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: StartWorkspacesPoolInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<StartWorkspacesPoolInput, StartWorkspacesPoolOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<StartWorkspacesPoolOutput>())
@@ -6194,7 +6437,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<StopWorkspacesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<StopWorkspacesInput, StopWorkspacesOutput>(xAmzTarget: "WorkspacesService.StopWorkspaces"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<StopWorkspacesInput, StopWorkspacesOutput>(overrides: ["X-Amz-Target": "WorkspacesService.StopWorkspaces"]))
         builder.serialize(ClientRuntime.BodyMiddleware<StopWorkspacesInput, StopWorkspacesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: StopWorkspacesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<StopWorkspacesInput, StopWorkspacesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<StopWorkspacesOutput>())
@@ -6267,7 +6510,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<StopWorkspacesPoolOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<StopWorkspacesPoolInput, StopWorkspacesPoolOutput>(xAmzTarget: "WorkspacesService.StopWorkspacesPool"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<StopWorkspacesPoolInput, StopWorkspacesPoolOutput>(overrides: ["X-Amz-Target": "WorkspacesService.StopWorkspacesPool"]))
         builder.serialize(ClientRuntime.BodyMiddleware<StopWorkspacesPoolInput, StopWorkspacesPoolOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: StopWorkspacesPoolInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<StopWorkspacesPoolInput, StopWorkspacesPoolOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<StopWorkspacesPoolOutput>())
@@ -6331,7 +6574,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<TerminateWorkspacesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<TerminateWorkspacesInput, TerminateWorkspacesOutput>(xAmzTarget: "WorkspacesService.TerminateWorkspaces"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<TerminateWorkspacesInput, TerminateWorkspacesOutput>(overrides: ["X-Amz-Target": "WorkspacesService.TerminateWorkspaces"]))
         builder.serialize(ClientRuntime.BodyMiddleware<TerminateWorkspacesInput, TerminateWorkspacesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: TerminateWorkspacesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<TerminateWorkspacesInput, TerminateWorkspacesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<TerminateWorkspacesOutput>())
@@ -6404,7 +6647,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<TerminateWorkspacesPoolOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<TerminateWorkspacesPoolInput, TerminateWorkspacesPoolOutput>(xAmzTarget: "WorkspacesService.TerminateWorkspacesPool"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<TerminateWorkspacesPoolInput, TerminateWorkspacesPoolOutput>(overrides: ["X-Amz-Target": "WorkspacesService.TerminateWorkspacesPool"]))
         builder.serialize(ClientRuntime.BodyMiddleware<TerminateWorkspacesPoolInput, TerminateWorkspacesPoolOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: TerminateWorkspacesPoolInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<TerminateWorkspacesPoolInput, TerminateWorkspacesPoolOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<TerminateWorkspacesPoolOutput>())
@@ -6477,7 +6720,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<TerminateWorkspacesPoolSessionOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<TerminateWorkspacesPoolSessionInput, TerminateWorkspacesPoolSessionOutput>(xAmzTarget: "WorkspacesService.TerminateWorkspacesPoolSession"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<TerminateWorkspacesPoolSessionInput, TerminateWorkspacesPoolSessionOutput>(overrides: ["X-Amz-Target": "WorkspacesService.TerminateWorkspacesPoolSession"]))
         builder.serialize(ClientRuntime.BodyMiddleware<TerminateWorkspacesPoolSessionInput, TerminateWorkspacesPoolSessionOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: TerminateWorkspacesPoolSessionInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<TerminateWorkspacesPoolSessionInput, TerminateWorkspacesPoolSessionOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<TerminateWorkspacesPoolSessionOutput>())
@@ -6548,7 +6791,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateConnectClientAddInOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateConnectClientAddInInput, UpdateConnectClientAddInOutput>(xAmzTarget: "WorkspacesService.UpdateConnectClientAddIn"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateConnectClientAddInInput, UpdateConnectClientAddInOutput>(overrides: ["X-Amz-Target": "WorkspacesService.UpdateConnectClientAddIn"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateConnectClientAddInInput, UpdateConnectClientAddInOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateConnectClientAddInInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateConnectClientAddInInput, UpdateConnectClientAddInOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateConnectClientAddInOutput>())
@@ -6627,7 +6870,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateConnectionAliasPermissionOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateConnectionAliasPermissionInput, UpdateConnectionAliasPermissionOutput>(xAmzTarget: "WorkspacesService.UpdateConnectionAliasPermission"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateConnectionAliasPermissionInput, UpdateConnectionAliasPermissionOutput>(overrides: ["X-Amz-Target": "WorkspacesService.UpdateConnectionAliasPermission"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateConnectionAliasPermissionInput, UpdateConnectionAliasPermissionOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateConnectionAliasPermissionInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateConnectionAliasPermissionInput, UpdateConnectionAliasPermissionOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateConnectionAliasPermissionOutput>())
@@ -6700,7 +6943,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateRulesOfIpGroupOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateRulesOfIpGroupInput, UpdateRulesOfIpGroupOutput>(xAmzTarget: "WorkspacesService.UpdateRulesOfIpGroup"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateRulesOfIpGroupInput, UpdateRulesOfIpGroupOutput>(overrides: ["X-Amz-Target": "WorkspacesService.UpdateRulesOfIpGroup"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateRulesOfIpGroupInput, UpdateRulesOfIpGroupOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateRulesOfIpGroupInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateRulesOfIpGroupInput, UpdateRulesOfIpGroupOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateRulesOfIpGroupOutput>())
@@ -6773,7 +7016,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateWorkspaceBundleOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateWorkspaceBundleInput, UpdateWorkspaceBundleOutput>(xAmzTarget: "WorkspacesService.UpdateWorkspaceBundle"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateWorkspaceBundleInput, UpdateWorkspaceBundleOutput>(overrides: ["X-Amz-Target": "WorkspacesService.UpdateWorkspaceBundle"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateWorkspaceBundleInput, UpdateWorkspaceBundleOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateWorkspaceBundleInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateWorkspaceBundleInput, UpdateWorkspaceBundleOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateWorkspaceBundleOutput>())
@@ -6850,7 +7093,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateWorkspaceImagePermissionOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateWorkspaceImagePermissionInput, UpdateWorkspaceImagePermissionOutput>(xAmzTarget: "WorkspacesService.UpdateWorkspaceImagePermission"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateWorkspaceImagePermissionInput, UpdateWorkspaceImagePermissionOutput>(overrides: ["X-Amz-Target": "WorkspacesService.UpdateWorkspaceImagePermission"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateWorkspaceImagePermissionInput, UpdateWorkspaceImagePermissionOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateWorkspaceImagePermissionInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateWorkspaceImagePermissionInput, UpdateWorkspaceImagePermissionOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateWorkspaceImagePermissionOutput>())
@@ -6925,7 +7168,7 @@ extension WorkSpacesClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateWorkspacesPoolOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateWorkspacesPoolInput, UpdateWorkspacesPoolOutput>(xAmzTarget: "WorkspacesService.UpdateWorkspacesPool"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateWorkspacesPoolInput, UpdateWorkspacesPoolOutput>(overrides: ["X-Amz-Target": "WorkspacesService.UpdateWorkspacesPool"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateWorkspacesPoolInput, UpdateWorkspacesPoolOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateWorkspacesPoolInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateWorkspacesPoolInput, UpdateWorkspacesPoolOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateWorkspacesPoolOutput>())

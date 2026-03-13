@@ -30,6 +30,7 @@ import enum AWSSDKChecksums.AWSChecksumCalculationMode
 import enum ClientRuntime.ClientLogMode
 import enum ClientRuntime.DefaultTelemetry
 import enum ClientRuntime.OrchestratorMetricsAttributesKeys
+import func ClientRuntime.initialize
 import protocol AWSClientRuntime.AWSDefaultClientConfiguration
 import protocol AWSClientRuntime.AWSRegionClientConfiguration
 import protocol AWSClientRuntime.AWSServiceClient
@@ -48,7 +49,6 @@ import protocol SmithyIdentity.BearerTokenIdentityResolver
 @_spi(AWSEndpointResolverMiddleware) import struct AWSClientRuntime.AWSEndpointResolverMiddleware
 import struct AWSClientRuntime.AmzSdkInvocationIdMiddleware
 import struct AWSClientRuntime.UserAgentMiddleware
-import struct AWSClientRuntime.XAmzTargetMiddleware
 import struct AWSSDKHTTPAuth.SigV4AuthScheme
 import struct ClientRuntime.AuthSchemeMiddleware
 @_spi(SmithyReadWrite) import struct ClientRuntime.BodyMiddleware
@@ -56,6 +56,9 @@ import struct ClientRuntime.ContentLengthMiddleware
 import struct ClientRuntime.ContentTypeMiddleware
 @_spi(SmithyReadWrite) import struct ClientRuntime.DeserializeMiddleware
 import struct ClientRuntime.LoggerMiddleware
+import struct ClientRuntime.MutateHeadersMiddleware
+import struct ClientRuntime.SendableHttpInterceptorProviderBox
+import struct ClientRuntime.SendableInterceptorProviderBox
 import struct ClientRuntime.SignerMiddleware
 import struct ClientRuntime.URLHostMiddleware
 import struct ClientRuntime.URLPathMiddleware
@@ -66,31 +69,49 @@ import struct SmithyRetries.DefaultRetryStrategy
 import struct SmithyRetriesAPI.RetryStrategyOptions
 import typealias SmithyHTTPAuthAPI.AuthSchemes
 
-public class LicenseManagerClient: AWSClientRuntime.AWSServiceClient {
+public final class LicenseManagerClient: AWSClientRuntime.AWSServiceClient {
     public static let clientName = "LicenseManagerClient"
     let client: ClientRuntime.SdkHttpClient
-    let config: LicenseManagerClient.LicenseManagerClientConfiguration
+    public let config: LicenseManagerClient.LicenseManagerClientConfig
     let serviceName = "License Manager"
 
-    public required init(config: LicenseManagerClient.LicenseManagerClientConfiguration) {
+    @available(*, deprecated, message: "Use LicenseManagerClient.LicenseManagerClientConfig instead")
+    public typealias Config = LicenseManagerClient.LicenseManagerClientConfiguration
+    public typealias Configuration = LicenseManagerClient.LicenseManagerClientConfig
+
+    public required init(config: LicenseManagerClient.LicenseManagerClientConfig) {
+        ClientRuntime.initialize()
         client = ClientRuntime.SdkHttpClient(engine: config.httpClientEngine, config: config.httpClientConfiguration)
         self.config = config
     }
 
+    @available(*, deprecated, message: "Use init(config: LicenseManagerClient.LicenseManagerClientConfig) instead")
+    public convenience init(config: LicenseManagerClient.LicenseManagerClientConfiguration) {
+        do {
+            try self.init(config: config.toSendable())
+        } catch {
+            // This should never happen since all values are already initialized in the class
+            fatalError("Failed to convert deprecated configuration: \(error)")
+        }
+    }
+
     public convenience init(region: Swift.String) throws {
-        let config = try LicenseManagerClient.LicenseManagerClientConfiguration(region: region)
+        let config = try LicenseManagerClient.LicenseManagerClientConfig(region: region)
         self.init(config: config)
     }
 
-    public convenience required init() async throws {
-        let config = try await LicenseManagerClient.LicenseManagerClientConfiguration()
+    public convenience init() async throws {
+        let config = try await LicenseManagerClient.LicenseManagerClientConfig()
         self.init(config: config)
     }
 }
 
 extension LicenseManagerClient {
 
-    public class LicenseManagerClientConfiguration: AWSClientRuntime.AWSDefaultClientConfiguration & AWSClientRuntime.AWSRegionClientConfiguration & ClientRuntime.DefaultClientConfiguration & ClientRuntime.DefaultHttpClientConfiguration {
+    /// Client configuration for LicenseManagerClient
+    ///
+    /// Conforms to `Sendable` for safe concurrent access across threads.
+    public struct LicenseManagerClientConfig: AWSClientRuntime.AWSDefaultClientConfiguration & AWSClientRuntime.AWSRegionClientConfiguration & ClientRuntime.DefaultClientConfiguration & ClientRuntime.DefaultHttpClientConfiguration, Swift.Sendable {
         public var useFIPS: Swift.Bool?
         public var useDualStack: Swift.Bool?
         public var appID: Swift.String?
@@ -114,66 +135,29 @@ extension LicenseManagerClient {
         public var authSchemePreference: [String]?
         public var authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver
         public var bearerTokenIdentityResolver: any SmithyIdentity.BearerTokenIdentityResolver
-        public private(set) var interceptorProviders: [ClientRuntime.InterceptorProvider]
-        public private(set) var httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]
-        public let logger: Smithy.LogAgent
-
-        private init(
-            _ useFIPS: Swift.Bool?,
-            _ useDualStack: Swift.Bool?,
-            _ appID: Swift.String?,
-            _ awsCredentialIdentityResolver: any SmithyIdentity.AWSCredentialIdentityResolver,
-            _ awsRetryMode: AWSClientRuntime.AWSRetryMode,
-            _ maxAttempts: Swift.Int?,
-            _ requestChecksumCalculation: AWSSDKChecksums.AWSChecksumCalculationMode,
-            _ responseChecksumValidation: AWSSDKChecksums.AWSChecksumCalculationMode,
-            _ ignoreConfiguredEndpointURLs: Swift.Bool?,
-            _ region: Swift.String?,
-            _ signingRegion: Swift.String?,
-            _ endpointResolver: EndpointResolver,
-            _ telemetryProvider: ClientRuntime.TelemetryProvider,
-            _ retryStrategyOptions: SmithyRetriesAPI.RetryStrategyOptions,
-            _ clientLogMode: ClientRuntime.ClientLogMode,
-            _ endpoint: Swift.String?,
-            _ idempotencyTokenGenerator: ClientRuntime.IdempotencyTokenGenerator,
-            _ httpClientEngine: SmithyHTTPAPI.HTTPClient,
-            _ httpClientConfiguration: ClientRuntime.HttpClientConfiguration,
-            _ authSchemes: SmithyHTTPAuthAPI.AuthSchemes?,
-            _ authSchemePreference: [String]?,
-            _ authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver,
-            _ bearerTokenIdentityResolver: any SmithyIdentity.BearerTokenIdentityResolver,
-            _ interceptorProviders: [ClientRuntime.InterceptorProvider],
-            _ httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]
-        ) {
-            self.useFIPS = useFIPS
-            self.useDualStack = useDualStack
-            self.appID = appID
-            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver
-            self.awsRetryMode = awsRetryMode
-            self.maxAttempts = maxAttempts
-            self.requestChecksumCalculation = requestChecksumCalculation
-            self.responseChecksumValidation = responseChecksumValidation
-            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
-            self.region = region
-            self.signingRegion = signingRegion
-            self.endpointResolver = endpointResolver
-            self.telemetryProvider = telemetryProvider
-            self.retryStrategyOptions = retryStrategyOptions
-            self.clientLogMode = clientLogMode
-            self.endpoint = endpoint
-            self.idempotencyTokenGenerator = idempotencyTokenGenerator
-            self.httpClientEngine = httpClientEngine
-            self.httpClientConfiguration = httpClientConfiguration
-            self.authSchemes = authSchemes
-            self.authSchemePreference = authSchemePreference
-            self.authSchemeResolver = authSchemeResolver
-            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver
-            self.interceptorProviders = interceptorProviders
-            self.httpInterceptorProviders = httpInterceptorProviders
-            self.logger = telemetryProvider.loggerProvider.getLogger(name: LicenseManagerClient.clientName)
+        // Interceptor providers with Sendable-safe internal storage
+        private var _interceptorProviders: [ClientRuntime.SendableInterceptorProviderBox] = []
+        public var interceptorProviders: [ClientRuntime.InterceptorProvider] {
+            get {
+                return _interceptorProviders
+            }
+            set {
+                _interceptorProviders = newValue.map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            }
         }
 
-        public convenience init(
+        private var _httpInterceptorProviders: [ClientRuntime.SendableHttpInterceptorProviderBox] = []
+        public var httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider] {
+            get {
+                return _httpInterceptorProviders
+            }
+            set {
+                _httpInterceptorProviders = newValue.map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            }
+        }
+        public var logger: Smithy.LogAgent
+
+        public init(
             useFIPS: Swift.Bool? = nil,
             useDualStack: Swift.Bool? = nil,
             appID: Swift.String? = nil,
@@ -200,36 +184,35 @@ extension LicenseManagerClient {
             interceptorProviders: [ClientRuntime.InterceptorProvider]? = nil,
             httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]? = nil
         ) throws {
-            self.init(
-                useFIPS,
-                useDualStack,
-                try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
-                awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
-                try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
-                maxAttempts,
-                try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation),
-                try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation),
-                ignoreConfiguredEndpointURLs,
-                region,
-                signingRegion,
-                try endpointResolver ?? DefaultEndpointResolver(),
-                telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider,
-                try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts),
-                clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode(),
-                endpoint,
-                idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
-                httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration),
-                httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration(),
-                authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()],
-                authSchemePreference ?? nil,
-                authSchemeResolver ?? DefaultLicenseManagerAuthSchemeResolver(),
-                bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
-                interceptorProviders ?? [],
-                httpInterceptorProviders ?? []
-            )
+            self.useFIPS = useFIPS
+            self.useDualStack = useDualStack
+            self.appID = try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID()
+            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain()
+            self.awsRetryMode = try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode()
+            self.maxAttempts = maxAttempts
+            self.requestChecksumCalculation = try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation)
+            self.responseChecksumValidation = try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation)
+            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
+            self.region = region
+            self.signingRegion = signingRegion
+            self.endpointResolver = try endpointResolver ?? DefaultEndpointResolver()
+            self.telemetryProvider = telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider
+            self.retryStrategyOptions = try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts)
+            self.clientLogMode = clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode()
+            self.endpoint = endpoint
+            self.idempotencyTokenGenerator = idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator()
+            self.httpClientEngine = httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration)
+            self.httpClientConfiguration = httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration()
+            self.authSchemes = authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()]
+            self.authSchemePreference = authSchemePreference ?? nil
+            self.authSchemeResolver = authSchemeResolver ?? DefaultLicenseManagerAuthSchemeResolver()
+            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: ""))
+            self._interceptorProviders = (interceptorProviders ?? []).map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            self._httpInterceptorProviders = (httpInterceptorProviders ?? []).map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            self.logger = (telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider).loggerProvider.getLogger(name: LicenseManagerClient.clientName)
         }
 
-        public convenience init(
+        public init(
             useFIPS: Swift.Bool? = nil,
             useDualStack: Swift.Bool? = nil,
             appID: Swift.String? = nil,
@@ -256,36 +239,266 @@ extension LicenseManagerClient {
             interceptorProviders: [ClientRuntime.InterceptorProvider]? = nil,
             httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]? = nil
         ) async throws {
-            self.init(
-                useFIPS,
-                useDualStack,
-                try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
-                awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
-                try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
-                maxAttempts,
-                try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation),
-                try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation),
-                ignoreConfiguredEndpointURLs,
-                try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region),
-                try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region),
-                try endpointResolver ?? DefaultEndpointResolver(),
-                telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider,
-                try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts),
-                clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode(),
-                endpoint,
-                idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
-                httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration),
-                httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration(),
-                authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()],
-                authSchemePreference ?? nil,
-                authSchemeResolver ?? DefaultLicenseManagerAuthSchemeResolver(),
-                bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
-                interceptorProviders ?? [],
-                httpInterceptorProviders ?? []
+            self.useFIPS = useFIPS
+            self.useDualStack = useDualStack
+            self.appID = try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID()
+            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain()
+            self.awsRetryMode = try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode()
+            self.maxAttempts = maxAttempts
+            self.requestChecksumCalculation = try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation)
+            self.responseChecksumValidation = try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation)
+            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
+            self.region = try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region)
+            self.signingRegion = try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region)
+            self.endpointResolver = try endpointResolver ?? DefaultEndpointResolver()
+            self.telemetryProvider = telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider
+            self.retryStrategyOptions = try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts)
+            self.clientLogMode = clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode()
+            self.endpoint = endpoint
+            self.idempotencyTokenGenerator = idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator()
+            self.httpClientEngine = httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration)
+            self.httpClientConfiguration = httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration()
+            self.authSchemes = authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()]
+            self.authSchemePreference = authSchemePreference ?? nil
+            self.authSchemeResolver = authSchemeResolver ?? DefaultLicenseManagerAuthSchemeResolver()
+            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: ""))
+            self._interceptorProviders = (interceptorProviders ?? []).map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            self._httpInterceptorProviders = (httpInterceptorProviders ?? []).map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            self.logger = (telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider).loggerProvider.getLogger(name: LicenseManagerClient.clientName)
+        }
+
+        public init() async throws {
+            try await self.init(
+                useFIPS: nil,
+                useDualStack: nil,
+                appID: nil,
+                awsCredentialIdentityResolver: nil,
+                awsRetryMode: nil,
+                maxAttempts: nil,
+                requestChecksumCalculation: nil,
+                responseChecksumValidation: nil,
+                ignoreConfiguredEndpointURLs: nil,
+                region: nil,
+                signingRegion: nil,
+                endpointResolver: nil,
+                telemetryProvider: nil,
+                retryStrategyOptions: nil,
+                clientLogMode: nil,
+                endpoint: nil,
+                idempotencyTokenGenerator: nil,
+                httpClientEngine: nil,
+                httpClientConfiguration: nil,
+                authSchemes: nil,
+                authSchemePreference: nil,
+                authSchemeResolver: nil,
+                bearerTokenIdentityResolver: nil,
+                interceptorProviders: nil,
+                httpInterceptorProviders: nil
             )
         }
 
-        public convenience required init() async throws {
+        public init(region: Swift.String) throws {
+            try self.init(
+                useFIPS: nil,
+                useDualStack: nil,
+                appID: try AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
+                awsCredentialIdentityResolver: AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
+                awsRetryMode: try AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
+                maxAttempts: nil,
+                requestChecksumCalculation: try AWSClientConfigDefaultsProvider.requestChecksumCalculation(),
+                responseChecksumValidation: try AWSClientConfigDefaultsProvider.responseChecksumValidation(),
+                ignoreConfiguredEndpointURLs: nil,
+                region: region,
+                signingRegion: region,
+                endpointResolver: try DefaultEndpointResolver(),
+                telemetryProvider: ClientRuntime.DefaultTelemetry.provider,
+                retryStrategyOptions: try AWSClientConfigDefaultsProvider.retryStrategyOptions(),
+                clientLogMode: AWSClientConfigDefaultsProvider.clientLogMode(),
+                endpoint: nil,
+                idempotencyTokenGenerator: AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
+                httpClientEngine: AWSClientConfigDefaultsProvider.httpClientEngine(),
+                httpClientConfiguration: AWSClientConfigDefaultsProvider.httpClientConfiguration(),
+                authSchemes: [AWSSDKHTTPAuth.SigV4AuthScheme()],
+                authSchemePreference: nil,
+                authSchemeResolver: DefaultLicenseManagerAuthSchemeResolver(),
+                bearerTokenIdentityResolver: SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
+                interceptorProviders: [],
+                httpInterceptorProviders: []
+            )
+        }
+
+        public var partitionID: String? {
+            return "\(LicenseManagerClient.clientName) - \(region ?? "")"
+        }
+
+        public mutating func addInterceptorProvider(_ provider: ClientRuntime.InterceptorProvider) {
+            self._interceptorProviders.append(ClientRuntime.SendableInterceptorProviderBox(provider))
+        }
+
+        public mutating func addInterceptorProvider(_ provider: ClientRuntime.HttpInterceptorProvider) {
+            self._httpInterceptorProviders.append(ClientRuntime.SendableHttpInterceptorProviderBox(provider))
+        }
+
+    }
+
+    @available(*, deprecated, message: "Use LicenseManagerClientConfig instead. This class will be removed in a future version.")
+    public final class LicenseManagerClientConfiguration: AWSClientRuntime.AWSDefaultClientConfiguration & AWSClientRuntime.AWSRegionClientConfiguration & ClientRuntime.DefaultClientConfiguration & ClientRuntime.DefaultHttpClientConfiguration {
+        public var useFIPS: Swift.Bool?
+        public var useDualStack: Swift.Bool?
+        public var appID: Swift.String?
+        public var awsCredentialIdentityResolver: any SmithyIdentity.AWSCredentialIdentityResolver
+        public var awsRetryMode: AWSClientRuntime.AWSRetryMode
+        public var maxAttempts: Swift.Int?
+        public var requestChecksumCalculation: AWSSDKChecksums.AWSChecksumCalculationMode
+        public var responseChecksumValidation: AWSSDKChecksums.AWSChecksumCalculationMode
+        public var ignoreConfiguredEndpointURLs: Swift.Bool?
+        public var region: Swift.String?
+        public var signingRegion: Swift.String?
+        public var endpointResolver: EndpointResolver
+        public var telemetryProvider: ClientRuntime.TelemetryProvider
+        public var retryStrategyOptions: SmithyRetriesAPI.RetryStrategyOptions
+        public var clientLogMode: ClientRuntime.ClientLogMode
+        public var endpoint: Swift.String?
+        public var idempotencyTokenGenerator: ClientRuntime.IdempotencyTokenGenerator
+        public var httpClientEngine: SmithyHTTPAPI.HTTPClient
+        public var httpClientConfiguration: ClientRuntime.HttpClientConfiguration
+        public var authSchemes: SmithyHTTPAuthAPI.AuthSchemes?
+        public var authSchemePreference: [String]?
+        public var authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver
+        public var bearerTokenIdentityResolver: any SmithyIdentity.BearerTokenIdentityResolver
+        // Interceptor providers with Sendable-safe internal storage
+        private var _interceptorProviders: [ClientRuntime.SendableInterceptorProviderBox] = []
+        public var interceptorProviders: [ClientRuntime.InterceptorProvider] {
+            get {
+                return _interceptorProviders
+            }
+            set {
+                _interceptorProviders = newValue.map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            }
+        }
+
+        private var _httpInterceptorProviders: [ClientRuntime.SendableHttpInterceptorProviderBox] = []
+        public var httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider] {
+            get {
+                return _httpInterceptorProviders
+            }
+            set {
+                _httpInterceptorProviders = newValue.map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            }
+        }
+        public var logger: Smithy.LogAgent
+
+        public init(
+            useFIPS: Swift.Bool? = nil,
+            useDualStack: Swift.Bool? = nil,
+            appID: Swift.String? = nil,
+            awsCredentialIdentityResolver: (any SmithyIdentity.AWSCredentialIdentityResolver)? = nil,
+            awsRetryMode: AWSClientRuntime.AWSRetryMode? = nil,
+            maxAttempts: Swift.Int? = nil,
+            requestChecksumCalculation: AWSSDKChecksums.AWSChecksumCalculationMode? = nil,
+            responseChecksumValidation: AWSSDKChecksums.AWSChecksumCalculationMode? = nil,
+            ignoreConfiguredEndpointURLs: Swift.Bool? = nil,
+            region: Swift.String? = nil,
+            signingRegion: Swift.String? = nil,
+            endpointResolver: EndpointResolver? = nil,
+            telemetryProvider: ClientRuntime.TelemetryProvider? = nil,
+            retryStrategyOptions: SmithyRetriesAPI.RetryStrategyOptions? = nil,
+            clientLogMode: ClientRuntime.ClientLogMode? = nil,
+            endpoint: Swift.String? = nil,
+            idempotencyTokenGenerator: ClientRuntime.IdempotencyTokenGenerator? = nil,
+            httpClientEngine: SmithyHTTPAPI.HTTPClient? = nil,
+            httpClientConfiguration: ClientRuntime.HttpClientConfiguration? = nil,
+            authSchemes: SmithyHTTPAuthAPI.AuthSchemes? = nil,
+            authSchemePreference: [String]? = nil,
+            authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver? = nil,
+            bearerTokenIdentityResolver: (any SmithyIdentity.BearerTokenIdentityResolver)? = nil,
+            interceptorProviders: [ClientRuntime.InterceptorProvider]? = nil,
+            httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]? = nil
+        ) throws {
+            self.useFIPS = useFIPS
+            self.useDualStack = useDualStack
+            self.appID = try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID()
+            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain()
+            self.awsRetryMode = try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode()
+            self.maxAttempts = maxAttempts
+            self.requestChecksumCalculation = try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation)
+            self.responseChecksumValidation = try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation)
+            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
+            self.region = region
+            self.signingRegion = signingRegion
+            self.endpointResolver = try endpointResolver ?? DefaultEndpointResolver()
+            self.telemetryProvider = telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider
+            self.retryStrategyOptions = try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts)
+            self.clientLogMode = clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode()
+            self.endpoint = endpoint
+            self.idempotencyTokenGenerator = idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator()
+            self.httpClientEngine = httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration)
+            self.httpClientConfiguration = httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration()
+            self.authSchemes = authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()]
+            self.authSchemePreference = authSchemePreference ?? nil
+            self.authSchemeResolver = authSchemeResolver ?? DefaultLicenseManagerAuthSchemeResolver()
+            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: ""))
+            self._interceptorProviders = (interceptorProviders ?? []).map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            self._httpInterceptorProviders = (httpInterceptorProviders ?? []).map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            self.logger = (telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider).loggerProvider.getLogger(name: LicenseManagerClient.clientName)
+        }
+
+        public init(
+            useFIPS: Swift.Bool? = nil,
+            useDualStack: Swift.Bool? = nil,
+            appID: Swift.String? = nil,
+            awsCredentialIdentityResolver: (any SmithyIdentity.AWSCredentialIdentityResolver)? = nil,
+            awsRetryMode: AWSClientRuntime.AWSRetryMode? = nil,
+            maxAttempts: Swift.Int? = nil,
+            requestChecksumCalculation: AWSSDKChecksums.AWSChecksumCalculationMode? = nil,
+            responseChecksumValidation: AWSSDKChecksums.AWSChecksumCalculationMode? = nil,
+            ignoreConfiguredEndpointURLs: Swift.Bool? = nil,
+            region: Swift.String? = nil,
+            signingRegion: Swift.String? = nil,
+            endpointResolver: EndpointResolver? = nil,
+            telemetryProvider: ClientRuntime.TelemetryProvider? = nil,
+            retryStrategyOptions: SmithyRetriesAPI.RetryStrategyOptions? = nil,
+            clientLogMode: ClientRuntime.ClientLogMode? = nil,
+            endpoint: Swift.String? = nil,
+            idempotencyTokenGenerator: ClientRuntime.IdempotencyTokenGenerator? = nil,
+            httpClientEngine: SmithyHTTPAPI.HTTPClient? = nil,
+            httpClientConfiguration: ClientRuntime.HttpClientConfiguration? = nil,
+            authSchemes: SmithyHTTPAuthAPI.AuthSchemes? = nil,
+            authSchemePreference: [String]? = nil,
+            authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver? = nil,
+            bearerTokenIdentityResolver: (any SmithyIdentity.BearerTokenIdentityResolver)? = nil,
+            interceptorProviders: [ClientRuntime.InterceptorProvider]? = nil,
+            httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]? = nil
+        ) async throws {
+            self.useFIPS = useFIPS
+            self.useDualStack = useDualStack
+            self.appID = try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID()
+            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain()
+            self.awsRetryMode = try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode()
+            self.maxAttempts = maxAttempts
+            self.requestChecksumCalculation = try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation)
+            self.responseChecksumValidation = try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation)
+            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
+            self.region = try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region)
+            self.signingRegion = try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region)
+            self.endpointResolver = try endpointResolver ?? DefaultEndpointResolver()
+            self.telemetryProvider = telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider
+            self.retryStrategyOptions = try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts)
+            self.clientLogMode = clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode()
+            self.endpoint = endpoint
+            self.idempotencyTokenGenerator = idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator()
+            self.httpClientEngine = httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration)
+            self.httpClientConfiguration = httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration()
+            self.authSchemes = authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()]
+            self.authSchemePreference = authSchemePreference ?? nil
+            self.authSchemeResolver = authSchemeResolver ?? DefaultLicenseManagerAuthSchemeResolver()
+            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: ""))
+            self._interceptorProviders = (interceptorProviders ?? []).map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            self._httpInterceptorProviders = (httpInterceptorProviders ?? []).map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            self.logger = (telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider).loggerProvider.getLogger(name: LicenseManagerClient.clientName)
+        }
+
+        public convenience init() async throws {
             try await self.init(
                 useFIPS: nil,
                 useDualStack: nil,
@@ -316,32 +529,32 @@ extension LicenseManagerClient {
         }
 
         public convenience init(region: Swift.String) throws {
-            self.init(
-                nil,
-                nil,
-                try AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
-                AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
-                try AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
-                nil,
-                try AWSClientConfigDefaultsProvider.requestChecksumCalculation(),
-                try AWSClientConfigDefaultsProvider.responseChecksumValidation(),
-                nil,
-                region,
-                region,
-                try DefaultEndpointResolver(),
-                ClientRuntime.DefaultTelemetry.provider,
-                try AWSClientConfigDefaultsProvider.retryStrategyOptions(),
-                AWSClientConfigDefaultsProvider.clientLogMode(),
-                nil,
-                AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
-                AWSClientConfigDefaultsProvider.httpClientEngine(),
-                AWSClientConfigDefaultsProvider.httpClientConfiguration(),
-                [AWSSDKHTTPAuth.SigV4AuthScheme()],
-                nil,
-                DefaultLicenseManagerAuthSchemeResolver(),
-                SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
-                [],
-                []
+            try self.init(
+                useFIPS: nil,
+                useDualStack: nil,
+                appID: try AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
+                awsCredentialIdentityResolver: AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
+                awsRetryMode: try AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
+                maxAttempts: nil,
+                requestChecksumCalculation: try AWSClientConfigDefaultsProvider.requestChecksumCalculation(),
+                responseChecksumValidation: try AWSClientConfigDefaultsProvider.responseChecksumValidation(),
+                ignoreConfiguredEndpointURLs: nil,
+                region: region,
+                signingRegion: region,
+                endpointResolver: try DefaultEndpointResolver(),
+                telemetryProvider: ClientRuntime.DefaultTelemetry.provider,
+                retryStrategyOptions: try AWSClientConfigDefaultsProvider.retryStrategyOptions(),
+                clientLogMode: AWSClientConfigDefaultsProvider.clientLogMode(),
+                endpoint: nil,
+                idempotencyTokenGenerator: AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
+                httpClientEngine: AWSClientConfigDefaultsProvider.httpClientEngine(),
+                httpClientConfiguration: AWSClientConfigDefaultsProvider.httpClientConfiguration(),
+                authSchemes: [AWSSDKHTTPAuth.SigV4AuthScheme()],
+                authSchemePreference: nil,
+                authSchemeResolver: DefaultLicenseManagerAuthSchemeResolver(),
+                bearerTokenIdentityResolver: SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
+                interceptorProviders: [],
+                httpInterceptorProviders: []
             )
         }
 
@@ -349,12 +562,42 @@ extension LicenseManagerClient {
             return "\(LicenseManagerClient.clientName) - \(region ?? "")"
         }
 
+        public func toSendable() throws -> LicenseManagerClientConfig {
+            return try LicenseManagerClientConfig(
+                useFIPS: self.useFIPS,
+                useDualStack: self.useDualStack,
+                appID: self.appID,
+                awsCredentialIdentityResolver: self.awsCredentialIdentityResolver,
+                awsRetryMode: self.awsRetryMode,
+                maxAttempts: self.maxAttempts,
+                requestChecksumCalculation: self.requestChecksumCalculation,
+                responseChecksumValidation: self.responseChecksumValidation,
+                ignoreConfiguredEndpointURLs: self.ignoreConfiguredEndpointURLs,
+                region: self.region,
+                signingRegion: self.signingRegion,
+                endpointResolver: self.endpointResolver,
+                telemetryProvider: self.telemetryProvider,
+                retryStrategyOptions: self.retryStrategyOptions,
+                clientLogMode: self.clientLogMode,
+                endpoint: self.endpoint,
+                idempotencyTokenGenerator: self.idempotencyTokenGenerator,
+                httpClientEngine: self.httpClientEngine,
+                httpClientConfiguration: self.httpClientConfiguration,
+                authSchemes: self.authSchemes,
+                authSchemePreference: self.authSchemePreference,
+                authSchemeResolver: self.authSchemeResolver,
+                bearerTokenIdentityResolver: self.bearerTokenIdentityResolver,
+                interceptorProviders: self.interceptorProviders,
+                httpInterceptorProviders: self.httpInterceptorProviders
+            )
+        }
+
         public func addInterceptorProvider(_ provider: ClientRuntime.InterceptorProvider) {
-            self.interceptorProviders.append(provider)
+            self._interceptorProviders.append(ClientRuntime.SendableInterceptorProviderBox(provider))
         }
 
         public func addInterceptorProvider(_ provider: ClientRuntime.HttpInterceptorProvider) {
-            self.httpInterceptorProviders.append(provider)
+            self._httpInterceptorProviders.append(ClientRuntime.SendableHttpInterceptorProviderBox(provider))
         }
 
     }
@@ -422,7 +665,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<AcceptGrantOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<AcceptGrantInput, AcceptGrantOutput>(xAmzTarget: "AWSLicenseManager.AcceptGrant"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<AcceptGrantInput, AcceptGrantOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.AcceptGrant"]))
         builder.serialize(ClientRuntime.BodyMiddleware<AcceptGrantInput, AcceptGrantOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: AcceptGrantInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<AcceptGrantInput, AcceptGrantOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<AcceptGrantOutput>())
@@ -498,7 +741,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CheckInLicenseOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CheckInLicenseInput, CheckInLicenseOutput>(xAmzTarget: "AWSLicenseManager.CheckInLicense"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CheckInLicenseInput, CheckInLicenseOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.CheckInLicense"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CheckInLicenseInput, CheckInLicenseOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CheckInLicenseInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CheckInLicenseInput, CheckInLicenseOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CheckInLicenseOutput>())
@@ -577,7 +820,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CheckoutBorrowLicenseOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CheckoutBorrowLicenseInput, CheckoutBorrowLicenseOutput>(xAmzTarget: "AWSLicenseManager.CheckoutBorrowLicense"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CheckoutBorrowLicenseInput, CheckoutBorrowLicenseOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.CheckoutBorrowLicense"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CheckoutBorrowLicenseInput, CheckoutBorrowLicenseOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CheckoutBorrowLicenseInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CheckoutBorrowLicenseInput, CheckoutBorrowLicenseOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CheckoutBorrowLicenseOutput>())
@@ -655,7 +898,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CheckoutLicenseOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CheckoutLicenseInput, CheckoutLicenseOutput>(xAmzTarget: "AWSLicenseManager.CheckoutLicense"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CheckoutLicenseInput, CheckoutLicenseOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.CheckoutLicense"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CheckoutLicenseInput, CheckoutLicenseOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CheckoutLicenseInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CheckoutLicenseInput, CheckoutLicenseOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CheckoutLicenseOutput>())
@@ -730,7 +973,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateGrantOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateGrantInput, CreateGrantOutput>(xAmzTarget: "AWSLicenseManager.CreateGrant"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateGrantInput, CreateGrantOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.CreateGrant"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateGrantInput, CreateGrantOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateGrantInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateGrantInput, CreateGrantOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateGrantOutput>())
@@ -805,7 +1048,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateGrantVersionOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateGrantVersionInput, CreateGrantVersionOutput>(xAmzTarget: "AWSLicenseManager.CreateGrantVersion"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateGrantVersionInput, CreateGrantVersionOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.CreateGrantVersion"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateGrantVersionInput, CreateGrantVersionOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateGrantVersionInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateGrantVersionInput, CreateGrantVersionOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateGrantVersionOutput>())
@@ -880,7 +1123,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateLicenseOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateLicenseInput, CreateLicenseOutput>(xAmzTarget: "AWSLicenseManager.CreateLicense"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateLicenseInput, CreateLicenseOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.CreateLicense"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateLicenseInput, CreateLicenseOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateLicenseInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateLicenseInput, CreateLicenseOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateLicenseOutput>())
@@ -954,7 +1197,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateLicenseAssetGroupOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateLicenseAssetGroupInput, CreateLicenseAssetGroupOutput>(xAmzTarget: "AWSLicenseManager.CreateLicenseAssetGroup"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateLicenseAssetGroupInput, CreateLicenseAssetGroupOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.CreateLicenseAssetGroup"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateLicenseAssetGroupInput, CreateLicenseAssetGroupOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateLicenseAssetGroupInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateLicenseAssetGroupInput, CreateLicenseAssetGroupOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateLicenseAssetGroupOutput>())
@@ -1028,7 +1271,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateLicenseAssetRulesetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateLicenseAssetRulesetInput, CreateLicenseAssetRulesetOutput>(xAmzTarget: "AWSLicenseManager.CreateLicenseAssetRuleset"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateLicenseAssetRulesetInput, CreateLicenseAssetRulesetOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.CreateLicenseAssetRuleset"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateLicenseAssetRulesetInput, CreateLicenseAssetRulesetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateLicenseAssetRulesetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateLicenseAssetRulesetInput, CreateLicenseAssetRulesetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateLicenseAssetRulesetOutput>())
@@ -1102,7 +1345,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateLicenseConfigurationOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateLicenseConfigurationInput, CreateLicenseConfigurationOutput>(xAmzTarget: "AWSLicenseManager.CreateLicenseConfiguration"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateLicenseConfigurationInput, CreateLicenseConfigurationOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.CreateLicenseConfiguration"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateLicenseConfigurationInput, CreateLicenseConfigurationOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateLicenseConfigurationInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateLicenseConfigurationInput, CreateLicenseConfigurationOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateLicenseConfigurationOutput>())
@@ -1176,7 +1419,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateLicenseConversionTaskForResourceOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateLicenseConversionTaskForResourceInput, CreateLicenseConversionTaskForResourceOutput>(xAmzTarget: "AWSLicenseManager.CreateLicenseConversionTaskForResource"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateLicenseConversionTaskForResourceInput, CreateLicenseConversionTaskForResourceOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.CreateLicenseConversionTaskForResource"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateLicenseConversionTaskForResourceInput, CreateLicenseConversionTaskForResourceOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateLicenseConversionTaskForResourceInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateLicenseConversionTaskForResourceInput, CreateLicenseConversionTaskForResourceOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateLicenseConversionTaskForResourceOutput>())
@@ -1252,7 +1495,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateLicenseManagerReportGeneratorOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateLicenseManagerReportGeneratorInput, CreateLicenseManagerReportGeneratorOutput>(xAmzTarget: "AWSLicenseManager.CreateLicenseManagerReportGenerator"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateLicenseManagerReportGeneratorInput, CreateLicenseManagerReportGeneratorOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.CreateLicenseManagerReportGenerator"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateLicenseManagerReportGeneratorInput, CreateLicenseManagerReportGeneratorOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateLicenseManagerReportGeneratorInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateLicenseManagerReportGeneratorInput, CreateLicenseManagerReportGeneratorOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateLicenseManagerReportGeneratorOutput>())
@@ -1328,7 +1571,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateLicenseVersionOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateLicenseVersionInput, CreateLicenseVersionOutput>(xAmzTarget: "AWSLicenseManager.CreateLicenseVersion"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateLicenseVersionInput, CreateLicenseVersionOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.CreateLicenseVersion"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateLicenseVersionInput, CreateLicenseVersionOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateLicenseVersionInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateLicenseVersionInput, CreateLicenseVersionOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateLicenseVersionOutput>())
@@ -1404,7 +1647,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateTokenOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateTokenInput, CreateTokenOutput>(xAmzTarget: "AWSLicenseManager.CreateToken"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateTokenInput, CreateTokenOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.CreateToken"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateTokenInput, CreateTokenOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateTokenInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateTokenInput, CreateTokenOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateTokenOutput>())
@@ -1479,7 +1722,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteGrantOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteGrantInput, DeleteGrantOutput>(xAmzTarget: "AWSLicenseManager.DeleteGrant"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteGrantInput, DeleteGrantOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.DeleteGrant"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteGrantInput, DeleteGrantOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteGrantInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteGrantInput, DeleteGrantOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteGrantOutput>())
@@ -1555,7 +1798,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteLicenseOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteLicenseInput, DeleteLicenseOutput>(xAmzTarget: "AWSLicenseManager.DeleteLicense"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteLicenseInput, DeleteLicenseOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.DeleteLicense"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteLicenseInput, DeleteLicenseOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteLicenseInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteLicenseInput, DeleteLicenseOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteLicenseOutput>())
@@ -1629,7 +1872,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteLicenseAssetGroupOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteLicenseAssetGroupInput, DeleteLicenseAssetGroupOutput>(xAmzTarget: "AWSLicenseManager.DeleteLicenseAssetGroup"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteLicenseAssetGroupInput, DeleteLicenseAssetGroupOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.DeleteLicenseAssetGroup"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteLicenseAssetGroupInput, DeleteLicenseAssetGroupOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteLicenseAssetGroupInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteLicenseAssetGroupInput, DeleteLicenseAssetGroupOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteLicenseAssetGroupOutput>())
@@ -1703,7 +1946,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteLicenseAssetRulesetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteLicenseAssetRulesetInput, DeleteLicenseAssetRulesetOutput>(xAmzTarget: "AWSLicenseManager.DeleteLicenseAssetRuleset"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteLicenseAssetRulesetInput, DeleteLicenseAssetRulesetOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.DeleteLicenseAssetRuleset"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteLicenseAssetRulesetInput, DeleteLicenseAssetRulesetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteLicenseAssetRulesetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteLicenseAssetRulesetInput, DeleteLicenseAssetRulesetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteLicenseAssetRulesetOutput>())
@@ -1776,7 +2019,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteLicenseConfigurationOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteLicenseConfigurationInput, DeleteLicenseConfigurationOutput>(xAmzTarget: "AWSLicenseManager.DeleteLicenseConfiguration"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteLicenseConfigurationInput, DeleteLicenseConfigurationOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.DeleteLicenseConfiguration"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteLicenseConfigurationInput, DeleteLicenseConfigurationOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteLicenseConfigurationInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteLicenseConfigurationInput, DeleteLicenseConfigurationOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteLicenseConfigurationOutput>())
@@ -1852,7 +2095,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteLicenseManagerReportGeneratorOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteLicenseManagerReportGeneratorInput, DeleteLicenseManagerReportGeneratorOutput>(xAmzTarget: "AWSLicenseManager.DeleteLicenseManagerReportGenerator"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteLicenseManagerReportGeneratorInput, DeleteLicenseManagerReportGeneratorOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.DeleteLicenseManagerReportGenerator"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteLicenseManagerReportGeneratorInput, DeleteLicenseManagerReportGeneratorOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteLicenseManagerReportGeneratorInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteLicenseManagerReportGeneratorInput, DeleteLicenseManagerReportGeneratorOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteLicenseManagerReportGeneratorOutput>())
@@ -1927,7 +2170,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteTokenOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteTokenInput, DeleteTokenOutput>(xAmzTarget: "AWSLicenseManager.DeleteToken"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteTokenInput, DeleteTokenOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.DeleteToken"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteTokenInput, DeleteTokenOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteTokenInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteTokenInput, DeleteTokenOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteTokenOutput>())
@@ -2002,7 +2245,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ExtendLicenseConsumptionOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ExtendLicenseConsumptionInput, ExtendLicenseConsumptionOutput>(xAmzTarget: "AWSLicenseManager.ExtendLicenseConsumption"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ExtendLicenseConsumptionInput, ExtendLicenseConsumptionOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.ExtendLicenseConsumption"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ExtendLicenseConsumptionInput, ExtendLicenseConsumptionOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ExtendLicenseConsumptionInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ExtendLicenseConsumptionInput, ExtendLicenseConsumptionOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ExtendLicenseConsumptionOutput>())
@@ -2075,7 +2318,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetAccessTokenOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetAccessTokenInput, GetAccessTokenOutput>(xAmzTarget: "AWSLicenseManager.GetAccessToken"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetAccessTokenInput, GetAccessTokenOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.GetAccessToken"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetAccessTokenInput, GetAccessTokenOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetAccessTokenInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetAccessTokenInput, GetAccessTokenOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetAccessTokenOutput>())
@@ -2150,7 +2393,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetGrantOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetGrantInput, GetGrantOutput>(xAmzTarget: "AWSLicenseManager.GetGrant"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetGrantInput, GetGrantOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.GetGrant"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetGrantInput, GetGrantOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetGrantInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetGrantInput, GetGrantOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetGrantOutput>())
@@ -2224,7 +2467,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetLicenseOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetLicenseInput, GetLicenseOutput>(xAmzTarget: "AWSLicenseManager.GetLicense"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetLicenseInput, GetLicenseOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.GetLicense"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetLicenseInput, GetLicenseOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetLicenseInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetLicenseInput, GetLicenseOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetLicenseOutput>())
@@ -2298,7 +2541,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetLicenseAssetGroupOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetLicenseAssetGroupInput, GetLicenseAssetGroupOutput>(xAmzTarget: "AWSLicenseManager.GetLicenseAssetGroup"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetLicenseAssetGroupInput, GetLicenseAssetGroupOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.GetLicenseAssetGroup"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetLicenseAssetGroupInput, GetLicenseAssetGroupOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetLicenseAssetGroupInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetLicenseAssetGroupInput, GetLicenseAssetGroupOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetLicenseAssetGroupOutput>())
@@ -2372,7 +2615,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetLicenseAssetRulesetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetLicenseAssetRulesetInput, GetLicenseAssetRulesetOutput>(xAmzTarget: "AWSLicenseManager.GetLicenseAssetRuleset"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetLicenseAssetRulesetInput, GetLicenseAssetRulesetOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.GetLicenseAssetRuleset"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetLicenseAssetRulesetInput, GetLicenseAssetRulesetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetLicenseAssetRulesetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetLicenseAssetRulesetInput, GetLicenseAssetRulesetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetLicenseAssetRulesetOutput>())
@@ -2445,7 +2688,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetLicenseConfigurationOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetLicenseConfigurationInput, GetLicenseConfigurationOutput>(xAmzTarget: "AWSLicenseManager.GetLicenseConfiguration"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetLicenseConfigurationInput, GetLicenseConfigurationOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.GetLicenseConfiguration"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetLicenseConfigurationInput, GetLicenseConfigurationOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetLicenseConfigurationInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetLicenseConfigurationInput, GetLicenseConfigurationOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetLicenseConfigurationOutput>())
@@ -2518,7 +2761,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetLicenseConversionTaskOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetLicenseConversionTaskInput, GetLicenseConversionTaskOutput>(xAmzTarget: "AWSLicenseManager.GetLicenseConversionTask"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetLicenseConversionTaskInput, GetLicenseConversionTaskOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.GetLicenseConversionTask"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetLicenseConversionTaskInput, GetLicenseConversionTaskOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetLicenseConversionTaskInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetLicenseConversionTaskInput, GetLicenseConversionTaskOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetLicenseConversionTaskOutput>())
@@ -2594,7 +2837,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetLicenseManagerReportGeneratorOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetLicenseManagerReportGeneratorInput, GetLicenseManagerReportGeneratorOutput>(xAmzTarget: "AWSLicenseManager.GetLicenseManagerReportGenerator"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetLicenseManagerReportGeneratorInput, GetLicenseManagerReportGeneratorOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.GetLicenseManagerReportGenerator"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetLicenseManagerReportGeneratorInput, GetLicenseManagerReportGeneratorOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetLicenseManagerReportGeneratorInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetLicenseManagerReportGeneratorInput, GetLicenseManagerReportGeneratorOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetLicenseManagerReportGeneratorOutput>())
@@ -2668,7 +2911,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetLicenseUsageOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetLicenseUsageInput, GetLicenseUsageOutput>(xAmzTarget: "AWSLicenseManager.GetLicenseUsage"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetLicenseUsageInput, GetLicenseUsageOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.GetLicenseUsage"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetLicenseUsageInput, GetLicenseUsageOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetLicenseUsageInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetLicenseUsageInput, GetLicenseUsageOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetLicenseUsageOutput>())
@@ -2740,7 +2983,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetServiceSettingsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetServiceSettingsInput, GetServiceSettingsOutput>(xAmzTarget: "AWSLicenseManager.GetServiceSettings"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetServiceSettingsInput, GetServiceSettingsOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.GetServiceSettings"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetServiceSettingsInput, GetServiceSettingsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetServiceSettingsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetServiceSettingsInput, GetServiceSettingsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetServiceSettingsOutput>())
@@ -2814,7 +3057,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListAssetsForLicenseAssetGroupOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListAssetsForLicenseAssetGroupInput, ListAssetsForLicenseAssetGroupOutput>(xAmzTarget: "AWSLicenseManager.ListAssetsForLicenseAssetGroup"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListAssetsForLicenseAssetGroupInput, ListAssetsForLicenseAssetGroupOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.ListAssetsForLicenseAssetGroup"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListAssetsForLicenseAssetGroupInput, ListAssetsForLicenseAssetGroupOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListAssetsForLicenseAssetGroupInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListAssetsForLicenseAssetGroupInput, ListAssetsForLicenseAssetGroupOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListAssetsForLicenseAssetGroupOutput>())
@@ -2888,7 +3131,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListAssociationsForLicenseConfigurationOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListAssociationsForLicenseConfigurationInput, ListAssociationsForLicenseConfigurationOutput>(xAmzTarget: "AWSLicenseManager.ListAssociationsForLicenseConfiguration"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListAssociationsForLicenseConfigurationInput, ListAssociationsForLicenseConfigurationOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.ListAssociationsForLicenseConfiguration"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListAssociationsForLicenseConfigurationInput, ListAssociationsForLicenseConfigurationOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListAssociationsForLicenseConfigurationInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListAssociationsForLicenseConfigurationInput, ListAssociationsForLicenseConfigurationOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListAssociationsForLicenseConfigurationOutput>())
@@ -2963,7 +3206,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListDistributedGrantsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListDistributedGrantsInput, ListDistributedGrantsOutput>(xAmzTarget: "AWSLicenseManager.ListDistributedGrants"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListDistributedGrantsInput, ListDistributedGrantsOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.ListDistributedGrants"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListDistributedGrantsInput, ListDistributedGrantsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListDistributedGrantsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListDistributedGrantsInput, ListDistributedGrantsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListDistributedGrantsOutput>())
@@ -3036,7 +3279,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListFailuresForLicenseConfigurationOperationsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListFailuresForLicenseConfigurationOperationsInput, ListFailuresForLicenseConfigurationOperationsOutput>(xAmzTarget: "AWSLicenseManager.ListFailuresForLicenseConfigurationOperations"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListFailuresForLicenseConfigurationOperationsInput, ListFailuresForLicenseConfigurationOperationsOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.ListFailuresForLicenseConfigurationOperations"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListFailuresForLicenseConfigurationOperationsInput, ListFailuresForLicenseConfigurationOperationsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListFailuresForLicenseConfigurationOperationsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListFailuresForLicenseConfigurationOperationsInput, ListFailuresForLicenseConfigurationOperationsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListFailuresForLicenseConfigurationOperationsOutput>())
@@ -3110,7 +3353,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListLicenseAssetGroupsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListLicenseAssetGroupsInput, ListLicenseAssetGroupsOutput>(xAmzTarget: "AWSLicenseManager.ListLicenseAssetGroups"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListLicenseAssetGroupsInput, ListLicenseAssetGroupsOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.ListLicenseAssetGroups"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListLicenseAssetGroupsInput, ListLicenseAssetGroupsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListLicenseAssetGroupsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListLicenseAssetGroupsInput, ListLicenseAssetGroupsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListLicenseAssetGroupsOutput>())
@@ -3184,7 +3427,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListLicenseAssetRulesetsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListLicenseAssetRulesetsInput, ListLicenseAssetRulesetsOutput>(xAmzTarget: "AWSLicenseManager.ListLicenseAssetRulesets"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListLicenseAssetRulesetsInput, ListLicenseAssetRulesetsOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.ListLicenseAssetRulesets"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListLicenseAssetRulesetsInput, ListLicenseAssetRulesetsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListLicenseAssetRulesetsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListLicenseAssetRulesetsInput, ListLicenseAssetRulesetsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListLicenseAssetRulesetsOutput>())
@@ -3258,7 +3501,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListLicenseConfigurationsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListLicenseConfigurationsInput, ListLicenseConfigurationsOutput>(xAmzTarget: "AWSLicenseManager.ListLicenseConfigurations"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListLicenseConfigurationsInput, ListLicenseConfigurationsOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.ListLicenseConfigurations"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListLicenseConfigurationsInput, ListLicenseConfigurationsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListLicenseConfigurationsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListLicenseConfigurationsInput, ListLicenseConfigurationsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListLicenseConfigurationsOutput>())
@@ -3332,7 +3575,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListLicenseConfigurationsForOrganizationOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListLicenseConfigurationsForOrganizationInput, ListLicenseConfigurationsForOrganizationOutput>(xAmzTarget: "AWSLicenseManager.ListLicenseConfigurationsForOrganization"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListLicenseConfigurationsForOrganizationInput, ListLicenseConfigurationsForOrganizationOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.ListLicenseConfigurationsForOrganization"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListLicenseConfigurationsForOrganizationInput, ListLicenseConfigurationsForOrganizationOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListLicenseConfigurationsForOrganizationInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListLicenseConfigurationsForOrganizationInput, ListLicenseConfigurationsForOrganizationOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListLicenseConfigurationsForOrganizationOutput>())
@@ -3405,7 +3648,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListLicenseConversionTasksOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListLicenseConversionTasksInput, ListLicenseConversionTasksOutput>(xAmzTarget: "AWSLicenseManager.ListLicenseConversionTasks"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListLicenseConversionTasksInput, ListLicenseConversionTasksOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.ListLicenseConversionTasks"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListLicenseConversionTasksInput, ListLicenseConversionTasksOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListLicenseConversionTasksInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListLicenseConversionTasksInput, ListLicenseConversionTasksOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListLicenseConversionTasksOutput>())
@@ -3481,7 +3724,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListLicenseManagerReportGeneratorsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListLicenseManagerReportGeneratorsInput, ListLicenseManagerReportGeneratorsOutput>(xAmzTarget: "AWSLicenseManager.ListLicenseManagerReportGenerators"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListLicenseManagerReportGeneratorsInput, ListLicenseManagerReportGeneratorsOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.ListLicenseManagerReportGenerators"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListLicenseManagerReportGeneratorsInput, ListLicenseManagerReportGeneratorsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListLicenseManagerReportGeneratorsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListLicenseManagerReportGeneratorsInput, ListLicenseManagerReportGeneratorsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListLicenseManagerReportGeneratorsOutput>())
@@ -3554,7 +3797,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListLicenseSpecificationsForResourceOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListLicenseSpecificationsForResourceInput, ListLicenseSpecificationsForResourceOutput>(xAmzTarget: "AWSLicenseManager.ListLicenseSpecificationsForResource"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListLicenseSpecificationsForResourceInput, ListLicenseSpecificationsForResourceOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.ListLicenseSpecificationsForResource"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListLicenseSpecificationsForResourceInput, ListLicenseSpecificationsForResourceOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListLicenseSpecificationsForResourceInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListLicenseSpecificationsForResourceInput, ListLicenseSpecificationsForResourceOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListLicenseSpecificationsForResourceOutput>())
@@ -3627,7 +3870,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListLicenseVersionsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListLicenseVersionsInput, ListLicenseVersionsOutput>(xAmzTarget: "AWSLicenseManager.ListLicenseVersions"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListLicenseVersionsInput, ListLicenseVersionsOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.ListLicenseVersions"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListLicenseVersionsInput, ListLicenseVersionsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListLicenseVersionsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListLicenseVersionsInput, ListLicenseVersionsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListLicenseVersionsOutput>())
@@ -3701,7 +3944,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListLicensesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListLicensesInput, ListLicensesOutput>(xAmzTarget: "AWSLicenseManager.ListLicenses"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListLicensesInput, ListLicensesOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.ListLicenses"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListLicensesInput, ListLicensesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListLicensesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListLicensesInput, ListLicensesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListLicensesOutput>())
@@ -3776,7 +4019,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListReceivedGrantsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListReceivedGrantsInput, ListReceivedGrantsOutput>(xAmzTarget: "AWSLicenseManager.ListReceivedGrants"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListReceivedGrantsInput, ListReceivedGrantsOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.ListReceivedGrants"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListReceivedGrantsInput, ListReceivedGrantsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListReceivedGrantsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListReceivedGrantsInput, ListReceivedGrantsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListReceivedGrantsOutput>())
@@ -3851,7 +4094,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListReceivedGrantsForOrganizationOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListReceivedGrantsForOrganizationInput, ListReceivedGrantsForOrganizationOutput>(xAmzTarget: "AWSLicenseManager.ListReceivedGrantsForOrganization"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListReceivedGrantsForOrganizationInput, ListReceivedGrantsForOrganizationOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.ListReceivedGrantsForOrganization"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListReceivedGrantsForOrganizationInput, ListReceivedGrantsForOrganizationOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListReceivedGrantsForOrganizationInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListReceivedGrantsForOrganizationInput, ListReceivedGrantsForOrganizationOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListReceivedGrantsForOrganizationOutput>())
@@ -3926,7 +4169,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListReceivedLicensesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListReceivedLicensesInput, ListReceivedLicensesOutput>(xAmzTarget: "AWSLicenseManager.ListReceivedLicenses"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListReceivedLicensesInput, ListReceivedLicensesOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.ListReceivedLicenses"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListReceivedLicensesInput, ListReceivedLicensesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListReceivedLicensesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListReceivedLicensesInput, ListReceivedLicensesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListReceivedLicensesOutput>())
@@ -4001,7 +4244,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListReceivedLicensesForOrganizationOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListReceivedLicensesForOrganizationInput, ListReceivedLicensesForOrganizationOutput>(xAmzTarget: "AWSLicenseManager.ListReceivedLicensesForOrganization"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListReceivedLicensesForOrganizationInput, ListReceivedLicensesForOrganizationOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.ListReceivedLicensesForOrganization"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListReceivedLicensesForOrganizationInput, ListReceivedLicensesForOrganizationOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListReceivedLicensesForOrganizationInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListReceivedLicensesForOrganizationInput, ListReceivedLicensesForOrganizationOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListReceivedLicensesForOrganizationOutput>())
@@ -4076,7 +4319,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListResourceInventoryOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListResourceInventoryInput, ListResourceInventoryOutput>(xAmzTarget: "AWSLicenseManager.ListResourceInventory"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListResourceInventoryInput, ListResourceInventoryOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.ListResourceInventory"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListResourceInventoryInput, ListResourceInventoryOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListResourceInventoryInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListResourceInventoryInput, ListResourceInventoryOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListResourceInventoryOutput>())
@@ -4150,7 +4393,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListTagsForResourceOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListTagsForResourceInput, ListTagsForResourceOutput>(xAmzTarget: "AWSLicenseManager.ListTagsForResource"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListTagsForResourceInput, ListTagsForResourceOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.ListTagsForResource"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListTagsForResourceInput, ListTagsForResourceOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListTagsForResourceInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListTagsForResourceInput, ListTagsForResourceOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListTagsForResourceOutput>())
@@ -4223,7 +4466,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListTokensOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListTokensInput, ListTokensOutput>(xAmzTarget: "AWSLicenseManager.ListTokens"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListTokensInput, ListTokensOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.ListTokens"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListTokensInput, ListTokensOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListTokensInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListTokensInput, ListTokensOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListTokensOutput>())
@@ -4297,7 +4540,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListUsageForLicenseConfigurationOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListUsageForLicenseConfigurationInput, ListUsageForLicenseConfigurationOutput>(xAmzTarget: "AWSLicenseManager.ListUsageForLicenseConfiguration"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListUsageForLicenseConfigurationInput, ListUsageForLicenseConfigurationOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.ListUsageForLicenseConfiguration"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListUsageForLicenseConfigurationInput, ListUsageForLicenseConfigurationOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListUsageForLicenseConfigurationInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListUsageForLicenseConfigurationInput, ListUsageForLicenseConfigurationOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListUsageForLicenseConfigurationOutput>())
@@ -4372,7 +4615,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<RejectGrantOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<RejectGrantInput, RejectGrantOutput>(xAmzTarget: "AWSLicenseManager.RejectGrant"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<RejectGrantInput, RejectGrantOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.RejectGrant"]))
         builder.serialize(ClientRuntime.BodyMiddleware<RejectGrantInput, RejectGrantOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: RejectGrantInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<RejectGrantInput, RejectGrantOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<RejectGrantOutput>())
@@ -4454,7 +4697,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<TagResourceOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<TagResourceInput, TagResourceOutput>(xAmzTarget: "AWSLicenseManager.TagResource"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<TagResourceInput, TagResourceOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.TagResource"]))
         builder.serialize(ClientRuntime.BodyMiddleware<TagResourceInput, TagResourceOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: TagResourceInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<TagResourceInput, TagResourceOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<TagResourceOutput>())
@@ -4528,7 +4771,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UntagResourceOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UntagResourceInput, UntagResourceOutput>(xAmzTarget: "AWSLicenseManager.UntagResource"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UntagResourceInput, UntagResourceOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.UntagResource"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UntagResourceInput, UntagResourceOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UntagResourceInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UntagResourceInput, UntagResourceOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UntagResourceOutput>())
@@ -4602,7 +4845,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateLicenseAssetGroupOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateLicenseAssetGroupInput, UpdateLicenseAssetGroupOutput>(xAmzTarget: "AWSLicenseManager.UpdateLicenseAssetGroup"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateLicenseAssetGroupInput, UpdateLicenseAssetGroupOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.UpdateLicenseAssetGroup"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateLicenseAssetGroupInput, UpdateLicenseAssetGroupOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateLicenseAssetGroupInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateLicenseAssetGroupInput, UpdateLicenseAssetGroupOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateLicenseAssetGroupOutput>())
@@ -4676,7 +4919,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateLicenseAssetRulesetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateLicenseAssetRulesetInput, UpdateLicenseAssetRulesetOutput>(xAmzTarget: "AWSLicenseManager.UpdateLicenseAssetRuleset"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateLicenseAssetRulesetInput, UpdateLicenseAssetRulesetOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.UpdateLicenseAssetRuleset"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateLicenseAssetRulesetInput, UpdateLicenseAssetRulesetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateLicenseAssetRulesetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateLicenseAssetRulesetInput, UpdateLicenseAssetRulesetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateLicenseAssetRulesetOutput>())
@@ -4751,7 +4994,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateLicenseConfigurationOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateLicenseConfigurationInput, UpdateLicenseConfigurationOutput>(xAmzTarget: "AWSLicenseManager.UpdateLicenseConfiguration"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateLicenseConfigurationInput, UpdateLicenseConfigurationOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.UpdateLicenseConfiguration"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateLicenseConfigurationInput, UpdateLicenseConfigurationOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateLicenseConfigurationInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateLicenseConfigurationInput, UpdateLicenseConfigurationOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateLicenseConfigurationOutput>())
@@ -4827,7 +5070,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateLicenseManagerReportGeneratorOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateLicenseManagerReportGeneratorInput, UpdateLicenseManagerReportGeneratorOutput>(xAmzTarget: "AWSLicenseManager.UpdateLicenseManagerReportGenerator"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateLicenseManagerReportGeneratorInput, UpdateLicenseManagerReportGeneratorOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.UpdateLicenseManagerReportGenerator"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateLicenseManagerReportGeneratorInput, UpdateLicenseManagerReportGeneratorOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateLicenseManagerReportGeneratorInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateLicenseManagerReportGeneratorInput, UpdateLicenseManagerReportGeneratorOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateLicenseManagerReportGeneratorOutput>())
@@ -4903,7 +5146,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateLicenseSpecificationsForResourceOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateLicenseSpecificationsForResourceInput, UpdateLicenseSpecificationsForResourceOutput>(xAmzTarget: "AWSLicenseManager.UpdateLicenseSpecificationsForResource"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateLicenseSpecificationsForResourceInput, UpdateLicenseSpecificationsForResourceOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.UpdateLicenseSpecificationsForResource"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateLicenseSpecificationsForResourceInput, UpdateLicenseSpecificationsForResourceOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateLicenseSpecificationsForResourceInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateLicenseSpecificationsForResourceInput, UpdateLicenseSpecificationsForResourceOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateLicenseSpecificationsForResourceOutput>())
@@ -4978,7 +5221,7 @@ extension LicenseManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateServiceSettingsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateServiceSettingsInput, UpdateServiceSettingsOutput>(xAmzTarget: "AWSLicenseManager.UpdateServiceSettings"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateServiceSettingsInput, UpdateServiceSettingsOutput>(overrides: ["X-Amz-Target": "AWSLicenseManager.UpdateServiceSettings"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateServiceSettingsInput, UpdateServiceSettingsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateServiceSettingsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateServiceSettingsInput, UpdateServiceSettingsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateServiceSettingsOutput>())

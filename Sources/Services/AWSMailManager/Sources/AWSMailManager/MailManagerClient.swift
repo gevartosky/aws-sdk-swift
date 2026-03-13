@@ -30,6 +30,7 @@ import enum AWSSDKChecksums.AWSChecksumCalculationMode
 import enum ClientRuntime.ClientLogMode
 import enum ClientRuntime.DefaultTelemetry
 import enum ClientRuntime.OrchestratorMetricsAttributesKeys
+import func ClientRuntime.initialize
 import protocol AWSClientRuntime.AWSDefaultClientConfiguration
 import protocol AWSClientRuntime.AWSRegionClientConfiguration
 import protocol AWSClientRuntime.AWSServiceClient
@@ -48,7 +49,6 @@ import protocol SmithyIdentity.BearerTokenIdentityResolver
 @_spi(AWSEndpointResolverMiddleware) import struct AWSClientRuntime.AWSEndpointResolverMiddleware
 import struct AWSClientRuntime.AmzSdkInvocationIdMiddleware
 import struct AWSClientRuntime.UserAgentMiddleware
-import struct AWSClientRuntime.XAmzTargetMiddleware
 import struct AWSSDKHTTPAuth.SigV4AuthScheme
 import struct ClientRuntime.AuthSchemeMiddleware
 @_spi(SmithyReadWrite) import struct ClientRuntime.BodyMiddleware
@@ -57,6 +57,9 @@ import struct ClientRuntime.ContentTypeMiddleware
 @_spi(SmithyReadWrite) import struct ClientRuntime.DeserializeMiddleware
 import struct ClientRuntime.IdempotencyTokenMiddleware
 import struct ClientRuntime.LoggerMiddleware
+import struct ClientRuntime.MutateHeadersMiddleware
+import struct ClientRuntime.SendableHttpInterceptorProviderBox
+import struct ClientRuntime.SendableInterceptorProviderBox
 import struct ClientRuntime.SignerMiddleware
 import struct ClientRuntime.URLHostMiddleware
 import struct ClientRuntime.URLPathMiddleware
@@ -67,31 +70,49 @@ import struct SmithyRetries.DefaultRetryStrategy
 import struct SmithyRetriesAPI.RetryStrategyOptions
 import typealias SmithyHTTPAuthAPI.AuthSchemes
 
-public class MailManagerClient: AWSClientRuntime.AWSServiceClient {
+public final class MailManagerClient: AWSClientRuntime.AWSServiceClient {
     public static let clientName = "MailManagerClient"
     let client: ClientRuntime.SdkHttpClient
-    let config: MailManagerClient.MailManagerClientConfiguration
+    public let config: MailManagerClient.MailManagerClientConfig
     let serviceName = "MailManager"
 
-    public required init(config: MailManagerClient.MailManagerClientConfiguration) {
+    @available(*, deprecated, message: "Use MailManagerClient.MailManagerClientConfig instead")
+    public typealias Config = MailManagerClient.MailManagerClientConfiguration
+    public typealias Configuration = MailManagerClient.MailManagerClientConfig
+
+    public required init(config: MailManagerClient.MailManagerClientConfig) {
+        ClientRuntime.initialize()
         client = ClientRuntime.SdkHttpClient(engine: config.httpClientEngine, config: config.httpClientConfiguration)
         self.config = config
     }
 
+    @available(*, deprecated, message: "Use init(config: MailManagerClient.MailManagerClientConfig) instead")
+    public convenience init(config: MailManagerClient.MailManagerClientConfiguration) {
+        do {
+            try self.init(config: config.toSendable())
+        } catch {
+            // This should never happen since all values are already initialized in the class
+            fatalError("Failed to convert deprecated configuration: \(error)")
+        }
+    }
+
     public convenience init(region: Swift.String) throws {
-        let config = try MailManagerClient.MailManagerClientConfiguration(region: region)
+        let config = try MailManagerClient.MailManagerClientConfig(region: region)
         self.init(config: config)
     }
 
-    public convenience required init() async throws {
-        let config = try await MailManagerClient.MailManagerClientConfiguration()
+    public convenience init() async throws {
+        let config = try await MailManagerClient.MailManagerClientConfig()
         self.init(config: config)
     }
 }
 
 extension MailManagerClient {
 
-    public class MailManagerClientConfiguration: AWSClientRuntime.AWSDefaultClientConfiguration & AWSClientRuntime.AWSRegionClientConfiguration & ClientRuntime.DefaultClientConfiguration & ClientRuntime.DefaultHttpClientConfiguration {
+    /// Client configuration for MailManagerClient
+    ///
+    /// Conforms to `Sendable` for safe concurrent access across threads.
+    public struct MailManagerClientConfig: AWSClientRuntime.AWSDefaultClientConfiguration & AWSClientRuntime.AWSRegionClientConfiguration & ClientRuntime.DefaultClientConfiguration & ClientRuntime.DefaultHttpClientConfiguration, Swift.Sendable {
         public var useFIPS: Swift.Bool?
         public var useDualStack: Swift.Bool?
         public var appID: Swift.String?
@@ -115,66 +136,29 @@ extension MailManagerClient {
         public var authSchemePreference: [String]?
         public var authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver
         public var bearerTokenIdentityResolver: any SmithyIdentity.BearerTokenIdentityResolver
-        public private(set) var interceptorProviders: [ClientRuntime.InterceptorProvider]
-        public private(set) var httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]
-        public let logger: Smithy.LogAgent
-
-        private init(
-            _ useFIPS: Swift.Bool?,
-            _ useDualStack: Swift.Bool?,
-            _ appID: Swift.String?,
-            _ awsCredentialIdentityResolver: any SmithyIdentity.AWSCredentialIdentityResolver,
-            _ awsRetryMode: AWSClientRuntime.AWSRetryMode,
-            _ maxAttempts: Swift.Int?,
-            _ requestChecksumCalculation: AWSSDKChecksums.AWSChecksumCalculationMode,
-            _ responseChecksumValidation: AWSSDKChecksums.AWSChecksumCalculationMode,
-            _ ignoreConfiguredEndpointURLs: Swift.Bool?,
-            _ region: Swift.String?,
-            _ signingRegion: Swift.String?,
-            _ endpointResolver: EndpointResolver,
-            _ telemetryProvider: ClientRuntime.TelemetryProvider,
-            _ retryStrategyOptions: SmithyRetriesAPI.RetryStrategyOptions,
-            _ clientLogMode: ClientRuntime.ClientLogMode,
-            _ endpoint: Swift.String?,
-            _ idempotencyTokenGenerator: ClientRuntime.IdempotencyTokenGenerator,
-            _ httpClientEngine: SmithyHTTPAPI.HTTPClient,
-            _ httpClientConfiguration: ClientRuntime.HttpClientConfiguration,
-            _ authSchemes: SmithyHTTPAuthAPI.AuthSchemes?,
-            _ authSchemePreference: [String]?,
-            _ authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver,
-            _ bearerTokenIdentityResolver: any SmithyIdentity.BearerTokenIdentityResolver,
-            _ interceptorProviders: [ClientRuntime.InterceptorProvider],
-            _ httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]
-        ) {
-            self.useFIPS = useFIPS
-            self.useDualStack = useDualStack
-            self.appID = appID
-            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver
-            self.awsRetryMode = awsRetryMode
-            self.maxAttempts = maxAttempts
-            self.requestChecksumCalculation = requestChecksumCalculation
-            self.responseChecksumValidation = responseChecksumValidation
-            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
-            self.region = region
-            self.signingRegion = signingRegion
-            self.endpointResolver = endpointResolver
-            self.telemetryProvider = telemetryProvider
-            self.retryStrategyOptions = retryStrategyOptions
-            self.clientLogMode = clientLogMode
-            self.endpoint = endpoint
-            self.idempotencyTokenGenerator = idempotencyTokenGenerator
-            self.httpClientEngine = httpClientEngine
-            self.httpClientConfiguration = httpClientConfiguration
-            self.authSchemes = authSchemes
-            self.authSchemePreference = authSchemePreference
-            self.authSchemeResolver = authSchemeResolver
-            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver
-            self.interceptorProviders = interceptorProviders
-            self.httpInterceptorProviders = httpInterceptorProviders
-            self.logger = telemetryProvider.loggerProvider.getLogger(name: MailManagerClient.clientName)
+        // Interceptor providers with Sendable-safe internal storage
+        private var _interceptorProviders: [ClientRuntime.SendableInterceptorProviderBox] = []
+        public var interceptorProviders: [ClientRuntime.InterceptorProvider] {
+            get {
+                return _interceptorProviders
+            }
+            set {
+                _interceptorProviders = newValue.map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            }
         }
 
-        public convenience init(
+        private var _httpInterceptorProviders: [ClientRuntime.SendableHttpInterceptorProviderBox] = []
+        public var httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider] {
+            get {
+                return _httpInterceptorProviders
+            }
+            set {
+                _httpInterceptorProviders = newValue.map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            }
+        }
+        public var logger: Smithy.LogAgent
+
+        public init(
             useFIPS: Swift.Bool? = nil,
             useDualStack: Swift.Bool? = nil,
             appID: Swift.String? = nil,
@@ -201,36 +185,35 @@ extension MailManagerClient {
             interceptorProviders: [ClientRuntime.InterceptorProvider]? = nil,
             httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]? = nil
         ) throws {
-            self.init(
-                useFIPS,
-                useDualStack,
-                try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
-                awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
-                try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
-                maxAttempts,
-                try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation),
-                try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation),
-                ignoreConfiguredEndpointURLs,
-                region,
-                signingRegion,
-                try endpointResolver ?? DefaultEndpointResolver(),
-                telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider,
-                try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts),
-                clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode(),
-                endpoint,
-                idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
-                httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration),
-                httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration(),
-                authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()],
-                authSchemePreference ?? nil,
-                authSchemeResolver ?? DefaultMailManagerAuthSchemeResolver(),
-                bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
-                interceptorProviders ?? [],
-                httpInterceptorProviders ?? []
-            )
+            self.useFIPS = useFIPS
+            self.useDualStack = useDualStack
+            self.appID = try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID()
+            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain()
+            self.awsRetryMode = try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode()
+            self.maxAttempts = maxAttempts
+            self.requestChecksumCalculation = try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation)
+            self.responseChecksumValidation = try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation)
+            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
+            self.region = region
+            self.signingRegion = signingRegion
+            self.endpointResolver = try endpointResolver ?? DefaultEndpointResolver()
+            self.telemetryProvider = telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider
+            self.retryStrategyOptions = try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts)
+            self.clientLogMode = clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode()
+            self.endpoint = endpoint
+            self.idempotencyTokenGenerator = idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator()
+            self.httpClientEngine = httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration)
+            self.httpClientConfiguration = httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration()
+            self.authSchemes = authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()]
+            self.authSchemePreference = authSchemePreference ?? nil
+            self.authSchemeResolver = authSchemeResolver ?? DefaultMailManagerAuthSchemeResolver()
+            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: ""))
+            self._interceptorProviders = (interceptorProviders ?? []).map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            self._httpInterceptorProviders = (httpInterceptorProviders ?? []).map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            self.logger = (telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider).loggerProvider.getLogger(name: MailManagerClient.clientName)
         }
 
-        public convenience init(
+        public init(
             useFIPS: Swift.Bool? = nil,
             useDualStack: Swift.Bool? = nil,
             appID: Swift.String? = nil,
@@ -257,36 +240,266 @@ extension MailManagerClient {
             interceptorProviders: [ClientRuntime.InterceptorProvider]? = nil,
             httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]? = nil
         ) async throws {
-            self.init(
-                useFIPS,
-                useDualStack,
-                try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
-                awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
-                try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
-                maxAttempts,
-                try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation),
-                try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation),
-                ignoreConfiguredEndpointURLs,
-                try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region),
-                try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region),
-                try endpointResolver ?? DefaultEndpointResolver(),
-                telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider,
-                try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts),
-                clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode(),
-                endpoint,
-                idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
-                httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration),
-                httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration(),
-                authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()],
-                authSchemePreference ?? nil,
-                authSchemeResolver ?? DefaultMailManagerAuthSchemeResolver(),
-                bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
-                interceptorProviders ?? [],
-                httpInterceptorProviders ?? []
+            self.useFIPS = useFIPS
+            self.useDualStack = useDualStack
+            self.appID = try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID()
+            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain()
+            self.awsRetryMode = try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode()
+            self.maxAttempts = maxAttempts
+            self.requestChecksumCalculation = try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation)
+            self.responseChecksumValidation = try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation)
+            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
+            self.region = try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region)
+            self.signingRegion = try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region)
+            self.endpointResolver = try endpointResolver ?? DefaultEndpointResolver()
+            self.telemetryProvider = telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider
+            self.retryStrategyOptions = try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts)
+            self.clientLogMode = clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode()
+            self.endpoint = endpoint
+            self.idempotencyTokenGenerator = idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator()
+            self.httpClientEngine = httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration)
+            self.httpClientConfiguration = httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration()
+            self.authSchemes = authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()]
+            self.authSchemePreference = authSchemePreference ?? nil
+            self.authSchemeResolver = authSchemeResolver ?? DefaultMailManagerAuthSchemeResolver()
+            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: ""))
+            self._interceptorProviders = (interceptorProviders ?? []).map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            self._httpInterceptorProviders = (httpInterceptorProviders ?? []).map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            self.logger = (telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider).loggerProvider.getLogger(name: MailManagerClient.clientName)
+        }
+
+        public init() async throws {
+            try await self.init(
+                useFIPS: nil,
+                useDualStack: nil,
+                appID: nil,
+                awsCredentialIdentityResolver: nil,
+                awsRetryMode: nil,
+                maxAttempts: nil,
+                requestChecksumCalculation: nil,
+                responseChecksumValidation: nil,
+                ignoreConfiguredEndpointURLs: nil,
+                region: nil,
+                signingRegion: nil,
+                endpointResolver: nil,
+                telemetryProvider: nil,
+                retryStrategyOptions: nil,
+                clientLogMode: nil,
+                endpoint: nil,
+                idempotencyTokenGenerator: nil,
+                httpClientEngine: nil,
+                httpClientConfiguration: nil,
+                authSchemes: nil,
+                authSchemePreference: nil,
+                authSchemeResolver: nil,
+                bearerTokenIdentityResolver: nil,
+                interceptorProviders: nil,
+                httpInterceptorProviders: nil
             )
         }
 
-        public convenience required init() async throws {
+        public init(region: Swift.String) throws {
+            try self.init(
+                useFIPS: nil,
+                useDualStack: nil,
+                appID: try AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
+                awsCredentialIdentityResolver: AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
+                awsRetryMode: try AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
+                maxAttempts: nil,
+                requestChecksumCalculation: try AWSClientConfigDefaultsProvider.requestChecksumCalculation(),
+                responseChecksumValidation: try AWSClientConfigDefaultsProvider.responseChecksumValidation(),
+                ignoreConfiguredEndpointURLs: nil,
+                region: region,
+                signingRegion: region,
+                endpointResolver: try DefaultEndpointResolver(),
+                telemetryProvider: ClientRuntime.DefaultTelemetry.provider,
+                retryStrategyOptions: try AWSClientConfigDefaultsProvider.retryStrategyOptions(),
+                clientLogMode: AWSClientConfigDefaultsProvider.clientLogMode(),
+                endpoint: nil,
+                idempotencyTokenGenerator: AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
+                httpClientEngine: AWSClientConfigDefaultsProvider.httpClientEngine(),
+                httpClientConfiguration: AWSClientConfigDefaultsProvider.httpClientConfiguration(),
+                authSchemes: [AWSSDKHTTPAuth.SigV4AuthScheme()],
+                authSchemePreference: nil,
+                authSchemeResolver: DefaultMailManagerAuthSchemeResolver(),
+                bearerTokenIdentityResolver: SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
+                interceptorProviders: [],
+                httpInterceptorProviders: []
+            )
+        }
+
+        public var partitionID: String? {
+            return "\(MailManagerClient.clientName) - \(region ?? "")"
+        }
+
+        public mutating func addInterceptorProvider(_ provider: ClientRuntime.InterceptorProvider) {
+            self._interceptorProviders.append(ClientRuntime.SendableInterceptorProviderBox(provider))
+        }
+
+        public mutating func addInterceptorProvider(_ provider: ClientRuntime.HttpInterceptorProvider) {
+            self._httpInterceptorProviders.append(ClientRuntime.SendableHttpInterceptorProviderBox(provider))
+        }
+
+    }
+
+    @available(*, deprecated, message: "Use MailManagerClientConfig instead. This class will be removed in a future version.")
+    public final class MailManagerClientConfiguration: AWSClientRuntime.AWSDefaultClientConfiguration & AWSClientRuntime.AWSRegionClientConfiguration & ClientRuntime.DefaultClientConfiguration & ClientRuntime.DefaultHttpClientConfiguration {
+        public var useFIPS: Swift.Bool?
+        public var useDualStack: Swift.Bool?
+        public var appID: Swift.String?
+        public var awsCredentialIdentityResolver: any SmithyIdentity.AWSCredentialIdentityResolver
+        public var awsRetryMode: AWSClientRuntime.AWSRetryMode
+        public var maxAttempts: Swift.Int?
+        public var requestChecksumCalculation: AWSSDKChecksums.AWSChecksumCalculationMode
+        public var responseChecksumValidation: AWSSDKChecksums.AWSChecksumCalculationMode
+        public var ignoreConfiguredEndpointURLs: Swift.Bool?
+        public var region: Swift.String?
+        public var signingRegion: Swift.String?
+        public var endpointResolver: EndpointResolver
+        public var telemetryProvider: ClientRuntime.TelemetryProvider
+        public var retryStrategyOptions: SmithyRetriesAPI.RetryStrategyOptions
+        public var clientLogMode: ClientRuntime.ClientLogMode
+        public var endpoint: Swift.String?
+        public var idempotencyTokenGenerator: ClientRuntime.IdempotencyTokenGenerator
+        public var httpClientEngine: SmithyHTTPAPI.HTTPClient
+        public var httpClientConfiguration: ClientRuntime.HttpClientConfiguration
+        public var authSchemes: SmithyHTTPAuthAPI.AuthSchemes?
+        public var authSchemePreference: [String]?
+        public var authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver
+        public var bearerTokenIdentityResolver: any SmithyIdentity.BearerTokenIdentityResolver
+        // Interceptor providers with Sendable-safe internal storage
+        private var _interceptorProviders: [ClientRuntime.SendableInterceptorProviderBox] = []
+        public var interceptorProviders: [ClientRuntime.InterceptorProvider] {
+            get {
+                return _interceptorProviders
+            }
+            set {
+                _interceptorProviders = newValue.map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            }
+        }
+
+        private var _httpInterceptorProviders: [ClientRuntime.SendableHttpInterceptorProviderBox] = []
+        public var httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider] {
+            get {
+                return _httpInterceptorProviders
+            }
+            set {
+                _httpInterceptorProviders = newValue.map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            }
+        }
+        public var logger: Smithy.LogAgent
+
+        public init(
+            useFIPS: Swift.Bool? = nil,
+            useDualStack: Swift.Bool? = nil,
+            appID: Swift.String? = nil,
+            awsCredentialIdentityResolver: (any SmithyIdentity.AWSCredentialIdentityResolver)? = nil,
+            awsRetryMode: AWSClientRuntime.AWSRetryMode? = nil,
+            maxAttempts: Swift.Int? = nil,
+            requestChecksumCalculation: AWSSDKChecksums.AWSChecksumCalculationMode? = nil,
+            responseChecksumValidation: AWSSDKChecksums.AWSChecksumCalculationMode? = nil,
+            ignoreConfiguredEndpointURLs: Swift.Bool? = nil,
+            region: Swift.String? = nil,
+            signingRegion: Swift.String? = nil,
+            endpointResolver: EndpointResolver? = nil,
+            telemetryProvider: ClientRuntime.TelemetryProvider? = nil,
+            retryStrategyOptions: SmithyRetriesAPI.RetryStrategyOptions? = nil,
+            clientLogMode: ClientRuntime.ClientLogMode? = nil,
+            endpoint: Swift.String? = nil,
+            idempotencyTokenGenerator: ClientRuntime.IdempotencyTokenGenerator? = nil,
+            httpClientEngine: SmithyHTTPAPI.HTTPClient? = nil,
+            httpClientConfiguration: ClientRuntime.HttpClientConfiguration? = nil,
+            authSchemes: SmithyHTTPAuthAPI.AuthSchemes? = nil,
+            authSchemePreference: [String]? = nil,
+            authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver? = nil,
+            bearerTokenIdentityResolver: (any SmithyIdentity.BearerTokenIdentityResolver)? = nil,
+            interceptorProviders: [ClientRuntime.InterceptorProvider]? = nil,
+            httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]? = nil
+        ) throws {
+            self.useFIPS = useFIPS
+            self.useDualStack = useDualStack
+            self.appID = try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID()
+            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain()
+            self.awsRetryMode = try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode()
+            self.maxAttempts = maxAttempts
+            self.requestChecksumCalculation = try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation)
+            self.responseChecksumValidation = try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation)
+            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
+            self.region = region
+            self.signingRegion = signingRegion
+            self.endpointResolver = try endpointResolver ?? DefaultEndpointResolver()
+            self.telemetryProvider = telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider
+            self.retryStrategyOptions = try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts)
+            self.clientLogMode = clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode()
+            self.endpoint = endpoint
+            self.idempotencyTokenGenerator = idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator()
+            self.httpClientEngine = httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration)
+            self.httpClientConfiguration = httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration()
+            self.authSchemes = authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()]
+            self.authSchemePreference = authSchemePreference ?? nil
+            self.authSchemeResolver = authSchemeResolver ?? DefaultMailManagerAuthSchemeResolver()
+            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: ""))
+            self._interceptorProviders = (interceptorProviders ?? []).map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            self._httpInterceptorProviders = (httpInterceptorProviders ?? []).map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            self.logger = (telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider).loggerProvider.getLogger(name: MailManagerClient.clientName)
+        }
+
+        public init(
+            useFIPS: Swift.Bool? = nil,
+            useDualStack: Swift.Bool? = nil,
+            appID: Swift.String? = nil,
+            awsCredentialIdentityResolver: (any SmithyIdentity.AWSCredentialIdentityResolver)? = nil,
+            awsRetryMode: AWSClientRuntime.AWSRetryMode? = nil,
+            maxAttempts: Swift.Int? = nil,
+            requestChecksumCalculation: AWSSDKChecksums.AWSChecksumCalculationMode? = nil,
+            responseChecksumValidation: AWSSDKChecksums.AWSChecksumCalculationMode? = nil,
+            ignoreConfiguredEndpointURLs: Swift.Bool? = nil,
+            region: Swift.String? = nil,
+            signingRegion: Swift.String? = nil,
+            endpointResolver: EndpointResolver? = nil,
+            telemetryProvider: ClientRuntime.TelemetryProvider? = nil,
+            retryStrategyOptions: SmithyRetriesAPI.RetryStrategyOptions? = nil,
+            clientLogMode: ClientRuntime.ClientLogMode? = nil,
+            endpoint: Swift.String? = nil,
+            idempotencyTokenGenerator: ClientRuntime.IdempotencyTokenGenerator? = nil,
+            httpClientEngine: SmithyHTTPAPI.HTTPClient? = nil,
+            httpClientConfiguration: ClientRuntime.HttpClientConfiguration? = nil,
+            authSchemes: SmithyHTTPAuthAPI.AuthSchemes? = nil,
+            authSchemePreference: [String]? = nil,
+            authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver? = nil,
+            bearerTokenIdentityResolver: (any SmithyIdentity.BearerTokenIdentityResolver)? = nil,
+            interceptorProviders: [ClientRuntime.InterceptorProvider]? = nil,
+            httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]? = nil
+        ) async throws {
+            self.useFIPS = useFIPS
+            self.useDualStack = useDualStack
+            self.appID = try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID()
+            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain()
+            self.awsRetryMode = try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode()
+            self.maxAttempts = maxAttempts
+            self.requestChecksumCalculation = try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation)
+            self.responseChecksumValidation = try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation)
+            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
+            self.region = try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region)
+            self.signingRegion = try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region)
+            self.endpointResolver = try endpointResolver ?? DefaultEndpointResolver()
+            self.telemetryProvider = telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider
+            self.retryStrategyOptions = try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts)
+            self.clientLogMode = clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode()
+            self.endpoint = endpoint
+            self.idempotencyTokenGenerator = idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator()
+            self.httpClientEngine = httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration)
+            self.httpClientConfiguration = httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration()
+            self.authSchemes = authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()]
+            self.authSchemePreference = authSchemePreference ?? nil
+            self.authSchemeResolver = authSchemeResolver ?? DefaultMailManagerAuthSchemeResolver()
+            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: ""))
+            self._interceptorProviders = (interceptorProviders ?? []).map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            self._httpInterceptorProviders = (httpInterceptorProviders ?? []).map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            self.logger = (telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider).loggerProvider.getLogger(name: MailManagerClient.clientName)
+        }
+
+        public convenience init() async throws {
             try await self.init(
                 useFIPS: nil,
                 useDualStack: nil,
@@ -317,32 +530,32 @@ extension MailManagerClient {
         }
 
         public convenience init(region: Swift.String) throws {
-            self.init(
-                nil,
-                nil,
-                try AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
-                AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
-                try AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
-                nil,
-                try AWSClientConfigDefaultsProvider.requestChecksumCalculation(),
-                try AWSClientConfigDefaultsProvider.responseChecksumValidation(),
-                nil,
-                region,
-                region,
-                try DefaultEndpointResolver(),
-                ClientRuntime.DefaultTelemetry.provider,
-                try AWSClientConfigDefaultsProvider.retryStrategyOptions(),
-                AWSClientConfigDefaultsProvider.clientLogMode(),
-                nil,
-                AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
-                AWSClientConfigDefaultsProvider.httpClientEngine(),
-                AWSClientConfigDefaultsProvider.httpClientConfiguration(),
-                [AWSSDKHTTPAuth.SigV4AuthScheme()],
-                nil,
-                DefaultMailManagerAuthSchemeResolver(),
-                SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
-                [],
-                []
+            try self.init(
+                useFIPS: nil,
+                useDualStack: nil,
+                appID: try AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
+                awsCredentialIdentityResolver: AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
+                awsRetryMode: try AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
+                maxAttempts: nil,
+                requestChecksumCalculation: try AWSClientConfigDefaultsProvider.requestChecksumCalculation(),
+                responseChecksumValidation: try AWSClientConfigDefaultsProvider.responseChecksumValidation(),
+                ignoreConfiguredEndpointURLs: nil,
+                region: region,
+                signingRegion: region,
+                endpointResolver: try DefaultEndpointResolver(),
+                telemetryProvider: ClientRuntime.DefaultTelemetry.provider,
+                retryStrategyOptions: try AWSClientConfigDefaultsProvider.retryStrategyOptions(),
+                clientLogMode: AWSClientConfigDefaultsProvider.clientLogMode(),
+                endpoint: nil,
+                idempotencyTokenGenerator: AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
+                httpClientEngine: AWSClientConfigDefaultsProvider.httpClientEngine(),
+                httpClientConfiguration: AWSClientConfigDefaultsProvider.httpClientConfiguration(),
+                authSchemes: [AWSSDKHTTPAuth.SigV4AuthScheme()],
+                authSchemePreference: nil,
+                authSchemeResolver: DefaultMailManagerAuthSchemeResolver(),
+                bearerTokenIdentityResolver: SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
+                interceptorProviders: [],
+                httpInterceptorProviders: []
             )
         }
 
@@ -350,12 +563,42 @@ extension MailManagerClient {
             return "\(MailManagerClient.clientName) - \(region ?? "")"
         }
 
+        public func toSendable() throws -> MailManagerClientConfig {
+            return try MailManagerClientConfig(
+                useFIPS: self.useFIPS,
+                useDualStack: self.useDualStack,
+                appID: self.appID,
+                awsCredentialIdentityResolver: self.awsCredentialIdentityResolver,
+                awsRetryMode: self.awsRetryMode,
+                maxAttempts: self.maxAttempts,
+                requestChecksumCalculation: self.requestChecksumCalculation,
+                responseChecksumValidation: self.responseChecksumValidation,
+                ignoreConfiguredEndpointURLs: self.ignoreConfiguredEndpointURLs,
+                region: self.region,
+                signingRegion: self.signingRegion,
+                endpointResolver: self.endpointResolver,
+                telemetryProvider: self.telemetryProvider,
+                retryStrategyOptions: self.retryStrategyOptions,
+                clientLogMode: self.clientLogMode,
+                endpoint: self.endpoint,
+                idempotencyTokenGenerator: self.idempotencyTokenGenerator,
+                httpClientEngine: self.httpClientEngine,
+                httpClientConfiguration: self.httpClientConfiguration,
+                authSchemes: self.authSchemes,
+                authSchemePreference: self.authSchemePreference,
+                authSchemeResolver: self.authSchemeResolver,
+                bearerTokenIdentityResolver: self.bearerTokenIdentityResolver,
+                interceptorProviders: self.interceptorProviders,
+                httpInterceptorProviders: self.httpInterceptorProviders
+            )
+        }
+
         public func addInterceptorProvider(_ provider: ClientRuntime.InterceptorProvider) {
-            self.interceptorProviders.append(provider)
+            self._interceptorProviders.append(ClientRuntime.SendableInterceptorProviderBox(provider))
         }
 
         public func addInterceptorProvider(_ provider: ClientRuntime.HttpInterceptorProvider) {
-            self.httpInterceptorProviders.append(provider)
+            self._httpInterceptorProviders.append(ClientRuntime.SendableHttpInterceptorProviderBox(provider))
         }
 
     }
@@ -421,7 +664,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateAddonInstanceOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateAddonInstanceInput, CreateAddonInstanceOutput>(xAmzTarget: "MailManagerSvc.CreateAddonInstance"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateAddonInstanceInput, CreateAddonInstanceOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.CreateAddonInstance"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateAddonInstanceInput, CreateAddonInstanceOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateAddonInstanceInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateAddonInstanceInput, CreateAddonInstanceOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateAddonInstanceOutput>())
@@ -493,7 +736,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateAddonSubscriptionOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateAddonSubscriptionInput, CreateAddonSubscriptionOutput>(xAmzTarget: "MailManagerSvc.CreateAddonSubscription"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateAddonSubscriptionInput, CreateAddonSubscriptionOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.CreateAddonSubscription"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateAddonSubscriptionInput, CreateAddonSubscriptionOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateAddonSubscriptionInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateAddonSubscriptionInput, CreateAddonSubscriptionOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateAddonSubscriptionOutput>())
@@ -567,7 +810,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateAddressListOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateAddressListInput, CreateAddressListOutput>(xAmzTarget: "MailManagerSvc.CreateAddressList"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateAddressListInput, CreateAddressListOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.CreateAddressList"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateAddressListInput, CreateAddressListOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateAddressListInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateAddressListInput, CreateAddressListOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateAddressListOutput>())
@@ -640,7 +883,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateAddressListImportJobOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateAddressListImportJobInput, CreateAddressListImportJobOutput>(xAmzTarget: "MailManagerSvc.CreateAddressListImportJob"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateAddressListImportJobInput, CreateAddressListImportJobOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.CreateAddressListImportJob"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateAddressListImportJobInput, CreateAddressListImportJobOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateAddressListImportJobInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateAddressListImportJobInput, CreateAddressListImportJobOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateAddressListImportJobOutput>())
@@ -714,7 +957,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateArchiveOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateArchiveInput, CreateArchiveOutput>(xAmzTarget: "MailManagerSvc.CreateArchive"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateArchiveInput, CreateArchiveOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.CreateArchive"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateArchiveInput, CreateArchiveOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateArchiveInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateArchiveInput, CreateArchiveOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateArchiveOutput>())
@@ -786,7 +1029,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateIngressPointOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateIngressPointInput, CreateIngressPointOutput>(xAmzTarget: "MailManagerSvc.CreateIngressPoint"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateIngressPointInput, CreateIngressPointOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.CreateIngressPoint"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateIngressPointInput, CreateIngressPointOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateIngressPointInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateIngressPointInput, CreateIngressPointOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateIngressPointOutput>())
@@ -858,7 +1101,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateRelayOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateRelayInput, CreateRelayOutput>(xAmzTarget: "MailManagerSvc.CreateRelay"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateRelayInput, CreateRelayOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.CreateRelay"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateRelayInput, CreateRelayOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateRelayInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateRelayInput, CreateRelayOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateRelayOutput>())
@@ -930,7 +1173,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateRuleSetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateRuleSetInput, CreateRuleSetOutput>(xAmzTarget: "MailManagerSvc.CreateRuleSet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateRuleSetInput, CreateRuleSetOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.CreateRuleSet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateRuleSetInput, CreateRuleSetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateRuleSetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateRuleSetInput, CreateRuleSetOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateRuleSetOutput>())
@@ -1002,7 +1245,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateTrafficPolicyOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateTrafficPolicyInput, CreateTrafficPolicyOutput>(xAmzTarget: "MailManagerSvc.CreateTrafficPolicy"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateTrafficPolicyInput, CreateTrafficPolicyOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.CreateTrafficPolicy"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateTrafficPolicyInput, CreateTrafficPolicyOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateTrafficPolicyInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateTrafficPolicyInput, CreateTrafficPolicyOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateTrafficPolicyOutput>())
@@ -1072,7 +1315,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteAddonInstanceOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteAddonInstanceInput, DeleteAddonInstanceOutput>(xAmzTarget: "MailManagerSvc.DeleteAddonInstance"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteAddonInstanceInput, DeleteAddonInstanceOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.DeleteAddonInstance"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteAddonInstanceInput, DeleteAddonInstanceOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteAddonInstanceInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteAddonInstanceInput, DeleteAddonInstanceOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteAddonInstanceOutput>())
@@ -1142,7 +1385,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteAddonSubscriptionOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteAddonSubscriptionInput, DeleteAddonSubscriptionOutput>(xAmzTarget: "MailManagerSvc.DeleteAddonSubscription"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteAddonSubscriptionInput, DeleteAddonSubscriptionOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.DeleteAddonSubscription"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteAddonSubscriptionInput, DeleteAddonSubscriptionOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteAddonSubscriptionInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteAddonSubscriptionInput, DeleteAddonSubscriptionOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteAddonSubscriptionOutput>())
@@ -1213,7 +1456,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteAddressListOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteAddressListInput, DeleteAddressListOutput>(xAmzTarget: "MailManagerSvc.DeleteAddressList"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteAddressListInput, DeleteAddressListOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.DeleteAddressList"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteAddressListInput, DeleteAddressListOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteAddressListInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteAddressListInput, DeleteAddressListOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteAddressListOutput>())
@@ -1285,7 +1528,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteArchiveOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteArchiveInput, DeleteArchiveOutput>(xAmzTarget: "MailManagerSvc.DeleteArchive"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteArchiveInput, DeleteArchiveOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.DeleteArchive"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteArchiveInput, DeleteArchiveOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteArchiveInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteArchiveInput, DeleteArchiveOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteArchiveOutput>())
@@ -1356,7 +1599,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteIngressPointOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteIngressPointInput, DeleteIngressPointOutput>(xAmzTarget: "MailManagerSvc.DeleteIngressPoint"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteIngressPointInput, DeleteIngressPointOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.DeleteIngressPoint"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteIngressPointInput, DeleteIngressPointOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteIngressPointInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteIngressPointInput, DeleteIngressPointOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteIngressPointOutput>())
@@ -1427,7 +1670,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteRelayOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteRelayInput, DeleteRelayOutput>(xAmzTarget: "MailManagerSvc.DeleteRelay"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteRelayInput, DeleteRelayOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.DeleteRelay"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteRelayInput, DeleteRelayOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteRelayInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteRelayInput, DeleteRelayOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteRelayOutput>())
@@ -1497,7 +1740,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteRuleSetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteRuleSetInput, DeleteRuleSetOutput>(xAmzTarget: "MailManagerSvc.DeleteRuleSet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteRuleSetInput, DeleteRuleSetOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.DeleteRuleSet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteRuleSetInput, DeleteRuleSetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteRuleSetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteRuleSetInput, DeleteRuleSetOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteRuleSetOutput>())
@@ -1568,7 +1811,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteTrafficPolicyOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteTrafficPolicyInput, DeleteTrafficPolicyOutput>(xAmzTarget: "MailManagerSvc.DeleteTrafficPolicy"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteTrafficPolicyInput, DeleteTrafficPolicyOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.DeleteTrafficPolicy"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteTrafficPolicyInput, DeleteTrafficPolicyOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteTrafficPolicyInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteTrafficPolicyInput, DeleteTrafficPolicyOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteTrafficPolicyOutput>())
@@ -1640,7 +1883,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeregisterMemberFromAddressListOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeregisterMemberFromAddressListInput, DeregisterMemberFromAddressListOutput>(xAmzTarget: "MailManagerSvc.DeregisterMemberFromAddressList"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeregisterMemberFromAddressListInput, DeregisterMemberFromAddressListOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.DeregisterMemberFromAddressList"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeregisterMemberFromAddressListInput, DeregisterMemberFromAddressListOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeregisterMemberFromAddressListInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeregisterMemberFromAddressListInput, DeregisterMemberFromAddressListOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeregisterMemberFromAddressListOutput>())
@@ -1710,7 +1953,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetAddonInstanceOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetAddonInstanceInput, GetAddonInstanceOutput>(xAmzTarget: "MailManagerSvc.GetAddonInstance"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetAddonInstanceInput, GetAddonInstanceOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.GetAddonInstance"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetAddonInstanceInput, GetAddonInstanceOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetAddonInstanceInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetAddonInstanceInput, GetAddonInstanceOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetAddonInstanceOutput>())
@@ -1780,7 +2023,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetAddonSubscriptionOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetAddonSubscriptionInput, GetAddonSubscriptionOutput>(xAmzTarget: "MailManagerSvc.GetAddonSubscription"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetAddonSubscriptionInput, GetAddonSubscriptionOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.GetAddonSubscription"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetAddonSubscriptionInput, GetAddonSubscriptionOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetAddonSubscriptionInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetAddonSubscriptionInput, GetAddonSubscriptionOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetAddonSubscriptionOutput>())
@@ -1852,7 +2095,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetAddressListOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetAddressListInput, GetAddressListOutput>(xAmzTarget: "MailManagerSvc.GetAddressList"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetAddressListInput, GetAddressListOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.GetAddressList"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetAddressListInput, GetAddressListOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetAddressListInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetAddressListInput, GetAddressListOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetAddressListOutput>())
@@ -1924,7 +2167,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetAddressListImportJobOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetAddressListImportJobInput, GetAddressListImportJobOutput>(xAmzTarget: "MailManagerSvc.GetAddressListImportJob"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetAddressListImportJobInput, GetAddressListImportJobOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.GetAddressListImportJob"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetAddressListImportJobInput, GetAddressListImportJobOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetAddressListImportJobInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetAddressListImportJobInput, GetAddressListImportJobOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetAddressListImportJobOutput>())
@@ -1996,7 +2239,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetArchiveOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetArchiveInput, GetArchiveOutput>(xAmzTarget: "MailManagerSvc.GetArchive"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetArchiveInput, GetArchiveOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.GetArchive"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetArchiveInput, GetArchiveOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetArchiveInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetArchiveInput, GetArchiveOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetArchiveOutput>())
@@ -2067,7 +2310,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetArchiveExportOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetArchiveExportInput, GetArchiveExportOutput>(xAmzTarget: "MailManagerSvc.GetArchiveExport"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetArchiveExportInput, GetArchiveExportOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.GetArchiveExport"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetArchiveExportInput, GetArchiveExportOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetArchiveExportInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetArchiveExportInput, GetArchiveExportOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetArchiveExportOutput>())
@@ -2138,7 +2381,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetArchiveMessageOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetArchiveMessageInput, GetArchiveMessageOutput>(xAmzTarget: "MailManagerSvc.GetArchiveMessage"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetArchiveMessageInput, GetArchiveMessageOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.GetArchiveMessage"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetArchiveMessageInput, GetArchiveMessageOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetArchiveMessageInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetArchiveMessageInput, GetArchiveMessageOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetArchiveMessageOutput>())
@@ -2209,7 +2452,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetArchiveMessageContentOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetArchiveMessageContentInput, GetArchiveMessageContentOutput>(xAmzTarget: "MailManagerSvc.GetArchiveMessageContent"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetArchiveMessageContentInput, GetArchiveMessageContentOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.GetArchiveMessageContent"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetArchiveMessageContentInput, GetArchiveMessageContentOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetArchiveMessageContentInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetArchiveMessageContentInput, GetArchiveMessageContentOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetArchiveMessageContentOutput>())
@@ -2280,7 +2523,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetArchiveSearchOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetArchiveSearchInput, GetArchiveSearchOutput>(xAmzTarget: "MailManagerSvc.GetArchiveSearch"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetArchiveSearchInput, GetArchiveSearchOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.GetArchiveSearch"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetArchiveSearchInput, GetArchiveSearchOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetArchiveSearchInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetArchiveSearchInput, GetArchiveSearchOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetArchiveSearchOutput>())
@@ -2352,7 +2595,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetArchiveSearchResultsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetArchiveSearchResultsInput, GetArchiveSearchResultsOutput>(xAmzTarget: "MailManagerSvc.GetArchiveSearchResults"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetArchiveSearchResultsInput, GetArchiveSearchResultsOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.GetArchiveSearchResults"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetArchiveSearchResultsInput, GetArchiveSearchResultsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetArchiveSearchResultsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetArchiveSearchResultsInput, GetArchiveSearchResultsOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetArchiveSearchResultsOutput>())
@@ -2422,7 +2665,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetIngressPointOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetIngressPointInput, GetIngressPointOutput>(xAmzTarget: "MailManagerSvc.GetIngressPoint"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetIngressPointInput, GetIngressPointOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.GetIngressPoint"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetIngressPointInput, GetIngressPointOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetIngressPointInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetIngressPointInput, GetIngressPointOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetIngressPointOutput>())
@@ -2494,7 +2737,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetMemberOfAddressListOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetMemberOfAddressListInput, GetMemberOfAddressListOutput>(xAmzTarget: "MailManagerSvc.GetMemberOfAddressList"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetMemberOfAddressListInput, GetMemberOfAddressListOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.GetMemberOfAddressList"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetMemberOfAddressListInput, GetMemberOfAddressListOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetMemberOfAddressListInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetMemberOfAddressListInput, GetMemberOfAddressListOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetMemberOfAddressListOutput>())
@@ -2564,7 +2807,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetRelayOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetRelayInput, GetRelayOutput>(xAmzTarget: "MailManagerSvc.GetRelay"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetRelayInput, GetRelayOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.GetRelay"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetRelayInput, GetRelayOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetRelayInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetRelayInput, GetRelayOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetRelayOutput>())
@@ -2634,7 +2877,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetRuleSetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetRuleSetInput, GetRuleSetOutput>(xAmzTarget: "MailManagerSvc.GetRuleSet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetRuleSetInput, GetRuleSetOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.GetRuleSet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetRuleSetInput, GetRuleSetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetRuleSetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetRuleSetInput, GetRuleSetOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetRuleSetOutput>())
@@ -2704,7 +2947,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetTrafficPolicyOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetTrafficPolicyInput, GetTrafficPolicyOutput>(xAmzTarget: "MailManagerSvc.GetTrafficPolicy"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetTrafficPolicyInput, GetTrafficPolicyOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.GetTrafficPolicy"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetTrafficPolicyInput, GetTrafficPolicyOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetTrafficPolicyInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetTrafficPolicyInput, GetTrafficPolicyOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetTrafficPolicyOutput>())
@@ -2773,7 +3016,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListAddonInstancesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListAddonInstancesInput, ListAddonInstancesOutput>(xAmzTarget: "MailManagerSvc.ListAddonInstances"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListAddonInstancesInput, ListAddonInstancesOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.ListAddonInstances"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListAddonInstancesInput, ListAddonInstancesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListAddonInstancesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListAddonInstancesInput, ListAddonInstancesOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListAddonInstancesOutput>())
@@ -2842,7 +3085,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListAddonSubscriptionsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListAddonSubscriptionsInput, ListAddonSubscriptionsOutput>(xAmzTarget: "MailManagerSvc.ListAddonSubscriptions"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListAddonSubscriptionsInput, ListAddonSubscriptionsOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.ListAddonSubscriptions"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListAddonSubscriptionsInput, ListAddonSubscriptionsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListAddonSubscriptionsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListAddonSubscriptionsInput, ListAddonSubscriptionsOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListAddonSubscriptionsOutput>())
@@ -2914,7 +3157,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListAddressListImportJobsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListAddressListImportJobsInput, ListAddressListImportJobsOutput>(xAmzTarget: "MailManagerSvc.ListAddressListImportJobs"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListAddressListImportJobsInput, ListAddressListImportJobsOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.ListAddressListImportJobs"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListAddressListImportJobsInput, ListAddressListImportJobsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListAddressListImportJobsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListAddressListImportJobsInput, ListAddressListImportJobsOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListAddressListImportJobsOutput>())
@@ -2985,7 +3228,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListAddressListsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListAddressListsInput, ListAddressListsOutput>(xAmzTarget: "MailManagerSvc.ListAddressLists"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListAddressListsInput, ListAddressListsOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.ListAddressLists"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListAddressListsInput, ListAddressListsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListAddressListsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListAddressListsInput, ListAddressListsOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListAddressListsOutput>())
@@ -3057,7 +3300,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListArchiveExportsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListArchiveExportsInput, ListArchiveExportsOutput>(xAmzTarget: "MailManagerSvc.ListArchiveExports"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListArchiveExportsInput, ListArchiveExportsOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.ListArchiveExports"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListArchiveExportsInput, ListArchiveExportsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListArchiveExportsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListArchiveExportsInput, ListArchiveExportsOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListArchiveExportsOutput>())
@@ -3129,7 +3372,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListArchiveSearchesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListArchiveSearchesInput, ListArchiveSearchesOutput>(xAmzTarget: "MailManagerSvc.ListArchiveSearches"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListArchiveSearchesInput, ListArchiveSearchesOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.ListArchiveSearches"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListArchiveSearchesInput, ListArchiveSearchesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListArchiveSearchesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListArchiveSearchesInput, ListArchiveSearchesOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListArchiveSearchesOutput>())
@@ -3200,7 +3443,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListArchivesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListArchivesInput, ListArchivesOutput>(xAmzTarget: "MailManagerSvc.ListArchives"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListArchivesInput, ListArchivesOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.ListArchives"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListArchivesInput, ListArchivesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListArchivesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListArchivesInput, ListArchivesOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListArchivesOutput>())
@@ -3269,7 +3512,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListIngressPointsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListIngressPointsInput, ListIngressPointsOutput>(xAmzTarget: "MailManagerSvc.ListIngressPoints"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListIngressPointsInput, ListIngressPointsOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.ListIngressPoints"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListIngressPointsInput, ListIngressPointsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListIngressPointsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListIngressPointsInput, ListIngressPointsOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListIngressPointsOutput>())
@@ -3341,7 +3584,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListMembersOfAddressListOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListMembersOfAddressListInput, ListMembersOfAddressListOutput>(xAmzTarget: "MailManagerSvc.ListMembersOfAddressList"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListMembersOfAddressListInput, ListMembersOfAddressListOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.ListMembersOfAddressList"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListMembersOfAddressListInput, ListMembersOfAddressListOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListMembersOfAddressListInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListMembersOfAddressListInput, ListMembersOfAddressListOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListMembersOfAddressListOutput>())
@@ -3410,7 +3653,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListRelaysOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListRelaysInput, ListRelaysOutput>(xAmzTarget: "MailManagerSvc.ListRelays"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListRelaysInput, ListRelaysOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.ListRelays"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListRelaysInput, ListRelaysOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListRelaysInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListRelaysInput, ListRelaysOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListRelaysOutput>())
@@ -3479,7 +3722,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListRuleSetsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListRuleSetsInput, ListRuleSetsOutput>(xAmzTarget: "MailManagerSvc.ListRuleSets"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListRuleSetsInput, ListRuleSetsOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.ListRuleSets"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListRuleSetsInput, ListRuleSetsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListRuleSetsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListRuleSetsInput, ListRuleSetsOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListRuleSetsOutput>())
@@ -3549,7 +3792,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListTagsForResourceOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListTagsForResourceInput, ListTagsForResourceOutput>(xAmzTarget: "MailManagerSvc.ListTagsForResource"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListTagsForResourceInput, ListTagsForResourceOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.ListTagsForResource"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListTagsForResourceInput, ListTagsForResourceOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListTagsForResourceInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListTagsForResourceInput, ListTagsForResourceOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListTagsForResourceOutput>())
@@ -3618,7 +3861,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListTrafficPoliciesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListTrafficPoliciesInput, ListTrafficPoliciesOutput>(xAmzTarget: "MailManagerSvc.ListTrafficPolicies"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListTrafficPoliciesInput, ListTrafficPoliciesOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.ListTrafficPolicies"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListTrafficPoliciesInput, ListTrafficPoliciesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListTrafficPoliciesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListTrafficPoliciesInput, ListTrafficPoliciesOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListTrafficPoliciesOutput>())
@@ -3691,7 +3934,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<RegisterMemberToAddressListOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<RegisterMemberToAddressListInput, RegisterMemberToAddressListOutput>(xAmzTarget: "MailManagerSvc.RegisterMemberToAddressList"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<RegisterMemberToAddressListInput, RegisterMemberToAddressListOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.RegisterMemberToAddressList"]))
         builder.serialize(ClientRuntime.BodyMiddleware<RegisterMemberToAddressListInput, RegisterMemberToAddressListOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: RegisterMemberToAddressListInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<RegisterMemberToAddressListInput, RegisterMemberToAddressListOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<RegisterMemberToAddressListOutput>())
@@ -3765,7 +4008,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<StartAddressListImportJobOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<StartAddressListImportJobInput, StartAddressListImportJobOutput>(xAmzTarget: "MailManagerSvc.StartAddressListImportJob"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<StartAddressListImportJobInput, StartAddressListImportJobOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.StartAddressListImportJob"]))
         builder.serialize(ClientRuntime.BodyMiddleware<StartAddressListImportJobInput, StartAddressListImportJobOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: StartAddressListImportJobInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<StartAddressListImportJobInput, StartAddressListImportJobOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<StartAddressListImportJobOutput>())
@@ -3838,7 +4081,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<StartArchiveExportOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<StartArchiveExportInput, StartArchiveExportOutput>(xAmzTarget: "MailManagerSvc.StartArchiveExport"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<StartArchiveExportInput, StartArchiveExportOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.StartArchiveExport"]))
         builder.serialize(ClientRuntime.BodyMiddleware<StartArchiveExportInput, StartArchiveExportOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: StartArchiveExportInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<StartArchiveExportInput, StartArchiveExportOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<StartArchiveExportOutput>())
@@ -3912,7 +4155,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<StartArchiveSearchOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<StartArchiveSearchInput, StartArchiveSearchOutput>(xAmzTarget: "MailManagerSvc.StartArchiveSearch"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<StartArchiveSearchInput, StartArchiveSearchOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.StartArchiveSearch"]))
         builder.serialize(ClientRuntime.BodyMiddleware<StartArchiveSearchInput, StartArchiveSearchOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: StartArchiveSearchInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<StartArchiveSearchInput, StartArchiveSearchOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<StartArchiveSearchOutput>())
@@ -3985,7 +4228,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<StopAddressListImportJobOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<StopAddressListImportJobInput, StopAddressListImportJobOutput>(xAmzTarget: "MailManagerSvc.StopAddressListImportJob"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<StopAddressListImportJobInput, StopAddressListImportJobOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.StopAddressListImportJob"]))
         builder.serialize(ClientRuntime.BodyMiddleware<StopAddressListImportJobInput, StopAddressListImportJobOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: StopAddressListImportJobInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<StopAddressListImportJobInput, StopAddressListImportJobOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<StopAddressListImportJobOutput>())
@@ -4056,7 +4299,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<StopArchiveExportOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<StopArchiveExportInput, StopArchiveExportOutput>(xAmzTarget: "MailManagerSvc.StopArchiveExport"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<StopArchiveExportInput, StopArchiveExportOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.StopArchiveExport"]))
         builder.serialize(ClientRuntime.BodyMiddleware<StopArchiveExportInput, StopArchiveExportOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: StopArchiveExportInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<StopArchiveExportInput, StopArchiveExportOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<StopArchiveExportOutput>())
@@ -4127,7 +4370,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<StopArchiveSearchOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<StopArchiveSearchInput, StopArchiveSearchOutput>(xAmzTarget: "MailManagerSvc.StopArchiveSearch"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<StopArchiveSearchInput, StopArchiveSearchOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.StopArchiveSearch"]))
         builder.serialize(ClientRuntime.BodyMiddleware<StopArchiveSearchInput, StopArchiveSearchOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: StopArchiveSearchInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<StopArchiveSearchInput, StopArchiveSearchOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<StopArchiveSearchOutput>())
@@ -4199,7 +4442,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<TagResourceOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<TagResourceInput, TagResourceOutput>(xAmzTarget: "MailManagerSvc.TagResource"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<TagResourceInput, TagResourceOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.TagResource"]))
         builder.serialize(ClientRuntime.BodyMiddleware<TagResourceInput, TagResourceOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: TagResourceInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<TagResourceInput, TagResourceOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<TagResourceOutput>())
@@ -4270,7 +4513,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UntagResourceOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UntagResourceInput, UntagResourceOutput>(xAmzTarget: "MailManagerSvc.UntagResource"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UntagResourceInput, UntagResourceOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.UntagResource"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UntagResourceInput, UntagResourceOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UntagResourceInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UntagResourceInput, UntagResourceOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UntagResourceOutput>())
@@ -4344,7 +4587,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateArchiveOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateArchiveInput, UpdateArchiveOutput>(xAmzTarget: "MailManagerSvc.UpdateArchive"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateArchiveInput, UpdateArchiveOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.UpdateArchive"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateArchiveInput, UpdateArchiveOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateArchiveInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateArchiveInput, UpdateArchiveOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateArchiveOutput>())
@@ -4415,7 +4658,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateIngressPointOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateIngressPointInput, UpdateIngressPointOutput>(xAmzTarget: "MailManagerSvc.UpdateIngressPoint"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateIngressPointInput, UpdateIngressPointOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.UpdateIngressPoint"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateIngressPointInput, UpdateIngressPointOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateIngressPointInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateIngressPointInput, UpdateIngressPointOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateIngressPointOutput>())
@@ -4486,7 +4729,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateRelayOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateRelayInput, UpdateRelayOutput>(xAmzTarget: "MailManagerSvc.UpdateRelay"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateRelayInput, UpdateRelayOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.UpdateRelay"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateRelayInput, UpdateRelayOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateRelayInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateRelayInput, UpdateRelayOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateRelayOutput>())
@@ -4557,7 +4800,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateRuleSetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateRuleSetInput, UpdateRuleSetOutput>(xAmzTarget: "MailManagerSvc.UpdateRuleSet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateRuleSetInput, UpdateRuleSetOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.UpdateRuleSet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateRuleSetInput, UpdateRuleSetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateRuleSetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateRuleSetInput, UpdateRuleSetOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateRuleSetOutput>())
@@ -4628,7 +4871,7 @@ extension MailManagerClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateTrafficPolicyOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateTrafficPolicyInput, UpdateTrafficPolicyOutput>(xAmzTarget: "MailManagerSvc.UpdateTrafficPolicy"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateTrafficPolicyInput, UpdateTrafficPolicyOutput>(overrides: ["X-Amz-Target": "MailManagerSvc.UpdateTrafficPolicy"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateTrafficPolicyInput, UpdateTrafficPolicyOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateTrafficPolicyInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateTrafficPolicyInput, UpdateTrafficPolicyOutput>(contentType: "application/x-amz-json-1.0"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateTrafficPolicyOutput>())

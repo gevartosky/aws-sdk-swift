@@ -29,6 +29,7 @@ import enum AWSSDKChecksums.AWSChecksumCalculationMode
 import enum ClientRuntime.ClientLogMode
 import enum ClientRuntime.DefaultTelemetry
 import enum ClientRuntime.OrchestratorMetricsAttributesKeys
+import func ClientRuntime.initialize
 import protocol AWSClientRuntime.AWSDefaultClientConfiguration
 import protocol AWSClientRuntime.AWSRegionClientConfiguration
 import protocol AWSClientRuntime.AWSServiceClient
@@ -47,7 +48,6 @@ import protocol SmithyIdentity.BearerTokenIdentityResolver
 @_spi(AWSEndpointResolverMiddleware) import struct AWSClientRuntime.AWSEndpointResolverMiddleware
 import struct AWSClientRuntime.AmzSdkInvocationIdMiddleware
 import struct AWSClientRuntime.UserAgentMiddleware
-import struct AWSClientRuntime.XAmzTargetMiddleware
 import struct AWSSDKHTTPAuth.SigV4AuthScheme
 import struct ClientRuntime.AuthSchemeMiddleware
 @_spi(SmithyReadWrite) import struct ClientRuntime.BodyMiddleware
@@ -55,6 +55,9 @@ import struct ClientRuntime.ContentLengthMiddleware
 import struct ClientRuntime.ContentTypeMiddleware
 @_spi(SmithyReadWrite) import struct ClientRuntime.DeserializeMiddleware
 import struct ClientRuntime.LoggerMiddleware
+import struct ClientRuntime.MutateHeadersMiddleware
+import struct ClientRuntime.SendableHttpInterceptorProviderBox
+import struct ClientRuntime.SendableInterceptorProviderBox
 import struct ClientRuntime.SignerMiddleware
 import struct ClientRuntime.URLHostMiddleware
 import struct ClientRuntime.URLPathMiddleware
@@ -65,31 +68,49 @@ import struct SmithyRetries.DefaultRetryStrategy
 import struct SmithyRetriesAPI.RetryStrategyOptions
 import typealias SmithyHTTPAuthAPI.AuthSchemes
 
-public class WAFRegionalClient: AWSClientRuntime.AWSServiceClient {
+public final class WAFRegionalClient: AWSClientRuntime.AWSServiceClient {
     public static let clientName = "WAFRegionalClient"
     let client: ClientRuntime.SdkHttpClient
-    let config: WAFRegionalClient.WAFRegionalClientConfiguration
+    public let config: WAFRegionalClient.WAFRegionalClientConfig
     let serviceName = "WAF Regional"
 
-    public required init(config: WAFRegionalClient.WAFRegionalClientConfiguration) {
+    @available(*, deprecated, message: "Use WAFRegionalClient.WAFRegionalClientConfig instead")
+    public typealias Config = WAFRegionalClient.WAFRegionalClientConfiguration
+    public typealias Configuration = WAFRegionalClient.WAFRegionalClientConfig
+
+    public required init(config: WAFRegionalClient.WAFRegionalClientConfig) {
+        ClientRuntime.initialize()
         client = ClientRuntime.SdkHttpClient(engine: config.httpClientEngine, config: config.httpClientConfiguration)
         self.config = config
     }
 
+    @available(*, deprecated, message: "Use init(config: WAFRegionalClient.WAFRegionalClientConfig) instead")
+    public convenience init(config: WAFRegionalClient.WAFRegionalClientConfiguration) {
+        do {
+            try self.init(config: config.toSendable())
+        } catch {
+            // This should never happen since all values are already initialized in the class
+            fatalError("Failed to convert deprecated configuration: \(error)")
+        }
+    }
+
     public convenience init(region: Swift.String) throws {
-        let config = try WAFRegionalClient.WAFRegionalClientConfiguration(region: region)
+        let config = try WAFRegionalClient.WAFRegionalClientConfig(region: region)
         self.init(config: config)
     }
 
-    public convenience required init() async throws {
-        let config = try await WAFRegionalClient.WAFRegionalClientConfiguration()
+    public convenience init() async throws {
+        let config = try await WAFRegionalClient.WAFRegionalClientConfig()
         self.init(config: config)
     }
 }
 
 extension WAFRegionalClient {
 
-    public class WAFRegionalClientConfiguration: AWSClientRuntime.AWSDefaultClientConfiguration & AWSClientRuntime.AWSRegionClientConfiguration & ClientRuntime.DefaultClientConfiguration & ClientRuntime.DefaultHttpClientConfiguration {
+    /// Client configuration for WAFRegionalClient
+    ///
+    /// Conforms to `Sendable` for safe concurrent access across threads.
+    public struct WAFRegionalClientConfig: AWSClientRuntime.AWSDefaultClientConfiguration & AWSClientRuntime.AWSRegionClientConfiguration & ClientRuntime.DefaultClientConfiguration & ClientRuntime.DefaultHttpClientConfiguration, Swift.Sendable {
         public var useFIPS: Swift.Bool?
         public var useDualStack: Swift.Bool?
         public var appID: Swift.String?
@@ -113,66 +134,29 @@ extension WAFRegionalClient {
         public var authSchemePreference: [String]?
         public var authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver
         public var bearerTokenIdentityResolver: any SmithyIdentity.BearerTokenIdentityResolver
-        public private(set) var interceptorProviders: [ClientRuntime.InterceptorProvider]
-        public private(set) var httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]
-        public let logger: Smithy.LogAgent
-
-        private init(
-            _ useFIPS: Swift.Bool?,
-            _ useDualStack: Swift.Bool?,
-            _ appID: Swift.String?,
-            _ awsCredentialIdentityResolver: any SmithyIdentity.AWSCredentialIdentityResolver,
-            _ awsRetryMode: AWSClientRuntime.AWSRetryMode,
-            _ maxAttempts: Swift.Int?,
-            _ requestChecksumCalculation: AWSSDKChecksums.AWSChecksumCalculationMode,
-            _ responseChecksumValidation: AWSSDKChecksums.AWSChecksumCalculationMode,
-            _ ignoreConfiguredEndpointURLs: Swift.Bool?,
-            _ region: Swift.String?,
-            _ signingRegion: Swift.String?,
-            _ endpointResolver: EndpointResolver,
-            _ telemetryProvider: ClientRuntime.TelemetryProvider,
-            _ retryStrategyOptions: SmithyRetriesAPI.RetryStrategyOptions,
-            _ clientLogMode: ClientRuntime.ClientLogMode,
-            _ endpoint: Swift.String?,
-            _ idempotencyTokenGenerator: ClientRuntime.IdempotencyTokenGenerator,
-            _ httpClientEngine: SmithyHTTPAPI.HTTPClient,
-            _ httpClientConfiguration: ClientRuntime.HttpClientConfiguration,
-            _ authSchemes: SmithyHTTPAuthAPI.AuthSchemes?,
-            _ authSchemePreference: [String]?,
-            _ authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver,
-            _ bearerTokenIdentityResolver: any SmithyIdentity.BearerTokenIdentityResolver,
-            _ interceptorProviders: [ClientRuntime.InterceptorProvider],
-            _ httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]
-        ) {
-            self.useFIPS = useFIPS
-            self.useDualStack = useDualStack
-            self.appID = appID
-            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver
-            self.awsRetryMode = awsRetryMode
-            self.maxAttempts = maxAttempts
-            self.requestChecksumCalculation = requestChecksumCalculation
-            self.responseChecksumValidation = responseChecksumValidation
-            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
-            self.region = region
-            self.signingRegion = signingRegion
-            self.endpointResolver = endpointResolver
-            self.telemetryProvider = telemetryProvider
-            self.retryStrategyOptions = retryStrategyOptions
-            self.clientLogMode = clientLogMode
-            self.endpoint = endpoint
-            self.idempotencyTokenGenerator = idempotencyTokenGenerator
-            self.httpClientEngine = httpClientEngine
-            self.httpClientConfiguration = httpClientConfiguration
-            self.authSchemes = authSchemes
-            self.authSchemePreference = authSchemePreference
-            self.authSchemeResolver = authSchemeResolver
-            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver
-            self.interceptorProviders = interceptorProviders
-            self.httpInterceptorProviders = httpInterceptorProviders
-            self.logger = telemetryProvider.loggerProvider.getLogger(name: WAFRegionalClient.clientName)
+        // Interceptor providers with Sendable-safe internal storage
+        private var _interceptorProviders: [ClientRuntime.SendableInterceptorProviderBox] = []
+        public var interceptorProviders: [ClientRuntime.InterceptorProvider] {
+            get {
+                return _interceptorProviders
+            }
+            set {
+                _interceptorProviders = newValue.map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            }
         }
 
-        public convenience init(
+        private var _httpInterceptorProviders: [ClientRuntime.SendableHttpInterceptorProviderBox] = []
+        public var httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider] {
+            get {
+                return _httpInterceptorProviders
+            }
+            set {
+                _httpInterceptorProviders = newValue.map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            }
+        }
+        public var logger: Smithy.LogAgent
+
+        public init(
             useFIPS: Swift.Bool? = nil,
             useDualStack: Swift.Bool? = nil,
             appID: Swift.String? = nil,
@@ -199,36 +183,35 @@ extension WAFRegionalClient {
             interceptorProviders: [ClientRuntime.InterceptorProvider]? = nil,
             httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]? = nil
         ) throws {
-            self.init(
-                useFIPS,
-                useDualStack,
-                try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
-                awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
-                try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
-                maxAttempts,
-                try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation),
-                try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation),
-                ignoreConfiguredEndpointURLs,
-                region,
-                signingRegion,
-                try endpointResolver ?? DefaultEndpointResolver(),
-                telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider,
-                try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts),
-                clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode(),
-                endpoint,
-                idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
-                httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration),
-                httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration(),
-                authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()],
-                authSchemePreference ?? nil,
-                authSchemeResolver ?? DefaultWAFRegionalAuthSchemeResolver(),
-                bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
-                interceptorProviders ?? [],
-                httpInterceptorProviders ?? []
-            )
+            self.useFIPS = useFIPS
+            self.useDualStack = useDualStack
+            self.appID = try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID()
+            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain()
+            self.awsRetryMode = try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode()
+            self.maxAttempts = maxAttempts
+            self.requestChecksumCalculation = try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation)
+            self.responseChecksumValidation = try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation)
+            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
+            self.region = region
+            self.signingRegion = signingRegion
+            self.endpointResolver = try endpointResolver ?? DefaultEndpointResolver()
+            self.telemetryProvider = telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider
+            self.retryStrategyOptions = try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts)
+            self.clientLogMode = clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode()
+            self.endpoint = endpoint
+            self.idempotencyTokenGenerator = idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator()
+            self.httpClientEngine = httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration)
+            self.httpClientConfiguration = httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration()
+            self.authSchemes = authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()]
+            self.authSchemePreference = authSchemePreference ?? nil
+            self.authSchemeResolver = authSchemeResolver ?? DefaultWAFRegionalAuthSchemeResolver()
+            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: ""))
+            self._interceptorProviders = (interceptorProviders ?? []).map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            self._httpInterceptorProviders = (httpInterceptorProviders ?? []).map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            self.logger = (telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider).loggerProvider.getLogger(name: WAFRegionalClient.clientName)
         }
 
-        public convenience init(
+        public init(
             useFIPS: Swift.Bool? = nil,
             useDualStack: Swift.Bool? = nil,
             appID: Swift.String? = nil,
@@ -255,36 +238,266 @@ extension WAFRegionalClient {
             interceptorProviders: [ClientRuntime.InterceptorProvider]? = nil,
             httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]? = nil
         ) async throws {
-            self.init(
-                useFIPS,
-                useDualStack,
-                try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
-                awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
-                try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
-                maxAttempts,
-                try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation),
-                try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation),
-                ignoreConfiguredEndpointURLs,
-                try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region),
-                try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region),
-                try endpointResolver ?? DefaultEndpointResolver(),
-                telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider,
-                try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts),
-                clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode(),
-                endpoint,
-                idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
-                httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration),
-                httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration(),
-                authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()],
-                authSchemePreference ?? nil,
-                authSchemeResolver ?? DefaultWAFRegionalAuthSchemeResolver(),
-                bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
-                interceptorProviders ?? [],
-                httpInterceptorProviders ?? []
+            self.useFIPS = useFIPS
+            self.useDualStack = useDualStack
+            self.appID = try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID()
+            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain()
+            self.awsRetryMode = try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode()
+            self.maxAttempts = maxAttempts
+            self.requestChecksumCalculation = try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation)
+            self.responseChecksumValidation = try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation)
+            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
+            self.region = try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region)
+            self.signingRegion = try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region)
+            self.endpointResolver = try endpointResolver ?? DefaultEndpointResolver()
+            self.telemetryProvider = telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider
+            self.retryStrategyOptions = try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts)
+            self.clientLogMode = clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode()
+            self.endpoint = endpoint
+            self.idempotencyTokenGenerator = idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator()
+            self.httpClientEngine = httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration)
+            self.httpClientConfiguration = httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration()
+            self.authSchemes = authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()]
+            self.authSchemePreference = authSchemePreference ?? nil
+            self.authSchemeResolver = authSchemeResolver ?? DefaultWAFRegionalAuthSchemeResolver()
+            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: ""))
+            self._interceptorProviders = (interceptorProviders ?? []).map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            self._httpInterceptorProviders = (httpInterceptorProviders ?? []).map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            self.logger = (telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider).loggerProvider.getLogger(name: WAFRegionalClient.clientName)
+        }
+
+        public init() async throws {
+            try await self.init(
+                useFIPS: nil,
+                useDualStack: nil,
+                appID: nil,
+                awsCredentialIdentityResolver: nil,
+                awsRetryMode: nil,
+                maxAttempts: nil,
+                requestChecksumCalculation: nil,
+                responseChecksumValidation: nil,
+                ignoreConfiguredEndpointURLs: nil,
+                region: nil,
+                signingRegion: nil,
+                endpointResolver: nil,
+                telemetryProvider: nil,
+                retryStrategyOptions: nil,
+                clientLogMode: nil,
+                endpoint: nil,
+                idempotencyTokenGenerator: nil,
+                httpClientEngine: nil,
+                httpClientConfiguration: nil,
+                authSchemes: nil,
+                authSchemePreference: nil,
+                authSchemeResolver: nil,
+                bearerTokenIdentityResolver: nil,
+                interceptorProviders: nil,
+                httpInterceptorProviders: nil
             )
         }
 
-        public convenience required init() async throws {
+        public init(region: Swift.String) throws {
+            try self.init(
+                useFIPS: nil,
+                useDualStack: nil,
+                appID: try AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
+                awsCredentialIdentityResolver: AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
+                awsRetryMode: try AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
+                maxAttempts: nil,
+                requestChecksumCalculation: try AWSClientConfigDefaultsProvider.requestChecksumCalculation(),
+                responseChecksumValidation: try AWSClientConfigDefaultsProvider.responseChecksumValidation(),
+                ignoreConfiguredEndpointURLs: nil,
+                region: region,
+                signingRegion: region,
+                endpointResolver: try DefaultEndpointResolver(),
+                telemetryProvider: ClientRuntime.DefaultTelemetry.provider,
+                retryStrategyOptions: try AWSClientConfigDefaultsProvider.retryStrategyOptions(),
+                clientLogMode: AWSClientConfigDefaultsProvider.clientLogMode(),
+                endpoint: nil,
+                idempotencyTokenGenerator: AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
+                httpClientEngine: AWSClientConfigDefaultsProvider.httpClientEngine(),
+                httpClientConfiguration: AWSClientConfigDefaultsProvider.httpClientConfiguration(),
+                authSchemes: [AWSSDKHTTPAuth.SigV4AuthScheme()],
+                authSchemePreference: nil,
+                authSchemeResolver: DefaultWAFRegionalAuthSchemeResolver(),
+                bearerTokenIdentityResolver: SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
+                interceptorProviders: [],
+                httpInterceptorProviders: []
+            )
+        }
+
+        public var partitionID: String? {
+            return "\(WAFRegionalClient.clientName) - \(region ?? "")"
+        }
+
+        public mutating func addInterceptorProvider(_ provider: ClientRuntime.InterceptorProvider) {
+            self._interceptorProviders.append(ClientRuntime.SendableInterceptorProviderBox(provider))
+        }
+
+        public mutating func addInterceptorProvider(_ provider: ClientRuntime.HttpInterceptorProvider) {
+            self._httpInterceptorProviders.append(ClientRuntime.SendableHttpInterceptorProviderBox(provider))
+        }
+
+    }
+
+    @available(*, deprecated, message: "Use WAFRegionalClientConfig instead. This class will be removed in a future version.")
+    public final class WAFRegionalClientConfiguration: AWSClientRuntime.AWSDefaultClientConfiguration & AWSClientRuntime.AWSRegionClientConfiguration & ClientRuntime.DefaultClientConfiguration & ClientRuntime.DefaultHttpClientConfiguration {
+        public var useFIPS: Swift.Bool?
+        public var useDualStack: Swift.Bool?
+        public var appID: Swift.String?
+        public var awsCredentialIdentityResolver: any SmithyIdentity.AWSCredentialIdentityResolver
+        public var awsRetryMode: AWSClientRuntime.AWSRetryMode
+        public var maxAttempts: Swift.Int?
+        public var requestChecksumCalculation: AWSSDKChecksums.AWSChecksumCalculationMode
+        public var responseChecksumValidation: AWSSDKChecksums.AWSChecksumCalculationMode
+        public var ignoreConfiguredEndpointURLs: Swift.Bool?
+        public var region: Swift.String?
+        public var signingRegion: Swift.String?
+        public var endpointResolver: EndpointResolver
+        public var telemetryProvider: ClientRuntime.TelemetryProvider
+        public var retryStrategyOptions: SmithyRetriesAPI.RetryStrategyOptions
+        public var clientLogMode: ClientRuntime.ClientLogMode
+        public var endpoint: Swift.String?
+        public var idempotencyTokenGenerator: ClientRuntime.IdempotencyTokenGenerator
+        public var httpClientEngine: SmithyHTTPAPI.HTTPClient
+        public var httpClientConfiguration: ClientRuntime.HttpClientConfiguration
+        public var authSchemes: SmithyHTTPAuthAPI.AuthSchemes?
+        public var authSchemePreference: [String]?
+        public var authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver
+        public var bearerTokenIdentityResolver: any SmithyIdentity.BearerTokenIdentityResolver
+        // Interceptor providers with Sendable-safe internal storage
+        private var _interceptorProviders: [ClientRuntime.SendableInterceptorProviderBox] = []
+        public var interceptorProviders: [ClientRuntime.InterceptorProvider] {
+            get {
+                return _interceptorProviders
+            }
+            set {
+                _interceptorProviders = newValue.map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            }
+        }
+
+        private var _httpInterceptorProviders: [ClientRuntime.SendableHttpInterceptorProviderBox] = []
+        public var httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider] {
+            get {
+                return _httpInterceptorProviders
+            }
+            set {
+                _httpInterceptorProviders = newValue.map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            }
+        }
+        public var logger: Smithy.LogAgent
+
+        public init(
+            useFIPS: Swift.Bool? = nil,
+            useDualStack: Swift.Bool? = nil,
+            appID: Swift.String? = nil,
+            awsCredentialIdentityResolver: (any SmithyIdentity.AWSCredentialIdentityResolver)? = nil,
+            awsRetryMode: AWSClientRuntime.AWSRetryMode? = nil,
+            maxAttempts: Swift.Int? = nil,
+            requestChecksumCalculation: AWSSDKChecksums.AWSChecksumCalculationMode? = nil,
+            responseChecksumValidation: AWSSDKChecksums.AWSChecksumCalculationMode? = nil,
+            ignoreConfiguredEndpointURLs: Swift.Bool? = nil,
+            region: Swift.String? = nil,
+            signingRegion: Swift.String? = nil,
+            endpointResolver: EndpointResolver? = nil,
+            telemetryProvider: ClientRuntime.TelemetryProvider? = nil,
+            retryStrategyOptions: SmithyRetriesAPI.RetryStrategyOptions? = nil,
+            clientLogMode: ClientRuntime.ClientLogMode? = nil,
+            endpoint: Swift.String? = nil,
+            idempotencyTokenGenerator: ClientRuntime.IdempotencyTokenGenerator? = nil,
+            httpClientEngine: SmithyHTTPAPI.HTTPClient? = nil,
+            httpClientConfiguration: ClientRuntime.HttpClientConfiguration? = nil,
+            authSchemes: SmithyHTTPAuthAPI.AuthSchemes? = nil,
+            authSchemePreference: [String]? = nil,
+            authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver? = nil,
+            bearerTokenIdentityResolver: (any SmithyIdentity.BearerTokenIdentityResolver)? = nil,
+            interceptorProviders: [ClientRuntime.InterceptorProvider]? = nil,
+            httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]? = nil
+        ) throws {
+            self.useFIPS = useFIPS
+            self.useDualStack = useDualStack
+            self.appID = try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID()
+            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain()
+            self.awsRetryMode = try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode()
+            self.maxAttempts = maxAttempts
+            self.requestChecksumCalculation = try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation)
+            self.responseChecksumValidation = try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation)
+            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
+            self.region = region
+            self.signingRegion = signingRegion
+            self.endpointResolver = try endpointResolver ?? DefaultEndpointResolver()
+            self.telemetryProvider = telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider
+            self.retryStrategyOptions = try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts)
+            self.clientLogMode = clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode()
+            self.endpoint = endpoint
+            self.idempotencyTokenGenerator = idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator()
+            self.httpClientEngine = httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration)
+            self.httpClientConfiguration = httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration()
+            self.authSchemes = authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()]
+            self.authSchemePreference = authSchemePreference ?? nil
+            self.authSchemeResolver = authSchemeResolver ?? DefaultWAFRegionalAuthSchemeResolver()
+            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: ""))
+            self._interceptorProviders = (interceptorProviders ?? []).map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            self._httpInterceptorProviders = (httpInterceptorProviders ?? []).map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            self.logger = (telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider).loggerProvider.getLogger(name: WAFRegionalClient.clientName)
+        }
+
+        public init(
+            useFIPS: Swift.Bool? = nil,
+            useDualStack: Swift.Bool? = nil,
+            appID: Swift.String? = nil,
+            awsCredentialIdentityResolver: (any SmithyIdentity.AWSCredentialIdentityResolver)? = nil,
+            awsRetryMode: AWSClientRuntime.AWSRetryMode? = nil,
+            maxAttempts: Swift.Int? = nil,
+            requestChecksumCalculation: AWSSDKChecksums.AWSChecksumCalculationMode? = nil,
+            responseChecksumValidation: AWSSDKChecksums.AWSChecksumCalculationMode? = nil,
+            ignoreConfiguredEndpointURLs: Swift.Bool? = nil,
+            region: Swift.String? = nil,
+            signingRegion: Swift.String? = nil,
+            endpointResolver: EndpointResolver? = nil,
+            telemetryProvider: ClientRuntime.TelemetryProvider? = nil,
+            retryStrategyOptions: SmithyRetriesAPI.RetryStrategyOptions? = nil,
+            clientLogMode: ClientRuntime.ClientLogMode? = nil,
+            endpoint: Swift.String? = nil,
+            idempotencyTokenGenerator: ClientRuntime.IdempotencyTokenGenerator? = nil,
+            httpClientEngine: SmithyHTTPAPI.HTTPClient? = nil,
+            httpClientConfiguration: ClientRuntime.HttpClientConfiguration? = nil,
+            authSchemes: SmithyHTTPAuthAPI.AuthSchemes? = nil,
+            authSchemePreference: [String]? = nil,
+            authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver? = nil,
+            bearerTokenIdentityResolver: (any SmithyIdentity.BearerTokenIdentityResolver)? = nil,
+            interceptorProviders: [ClientRuntime.InterceptorProvider]? = nil,
+            httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]? = nil
+        ) async throws {
+            self.useFIPS = useFIPS
+            self.useDualStack = useDualStack
+            self.appID = try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID()
+            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain()
+            self.awsRetryMode = try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode()
+            self.maxAttempts = maxAttempts
+            self.requestChecksumCalculation = try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation)
+            self.responseChecksumValidation = try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation)
+            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
+            self.region = try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region)
+            self.signingRegion = try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region)
+            self.endpointResolver = try endpointResolver ?? DefaultEndpointResolver()
+            self.telemetryProvider = telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider
+            self.retryStrategyOptions = try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts)
+            self.clientLogMode = clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode()
+            self.endpoint = endpoint
+            self.idempotencyTokenGenerator = idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator()
+            self.httpClientEngine = httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration)
+            self.httpClientConfiguration = httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration()
+            self.authSchemes = authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()]
+            self.authSchemePreference = authSchemePreference ?? nil
+            self.authSchemeResolver = authSchemeResolver ?? DefaultWAFRegionalAuthSchemeResolver()
+            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: ""))
+            self._interceptorProviders = (interceptorProviders ?? []).map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            self._httpInterceptorProviders = (httpInterceptorProviders ?? []).map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            self.logger = (telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider).loggerProvider.getLogger(name: WAFRegionalClient.clientName)
+        }
+
+        public convenience init() async throws {
             try await self.init(
                 useFIPS: nil,
                 useDualStack: nil,
@@ -315,32 +528,32 @@ extension WAFRegionalClient {
         }
 
         public convenience init(region: Swift.String) throws {
-            self.init(
-                nil,
-                nil,
-                try AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
-                AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
-                try AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
-                nil,
-                try AWSClientConfigDefaultsProvider.requestChecksumCalculation(),
-                try AWSClientConfigDefaultsProvider.responseChecksumValidation(),
-                nil,
-                region,
-                region,
-                try DefaultEndpointResolver(),
-                ClientRuntime.DefaultTelemetry.provider,
-                try AWSClientConfigDefaultsProvider.retryStrategyOptions(),
-                AWSClientConfigDefaultsProvider.clientLogMode(),
-                nil,
-                AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
-                AWSClientConfigDefaultsProvider.httpClientEngine(),
-                AWSClientConfigDefaultsProvider.httpClientConfiguration(),
-                [AWSSDKHTTPAuth.SigV4AuthScheme()],
-                nil,
-                DefaultWAFRegionalAuthSchemeResolver(),
-                SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
-                [],
-                []
+            try self.init(
+                useFIPS: nil,
+                useDualStack: nil,
+                appID: try AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
+                awsCredentialIdentityResolver: AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
+                awsRetryMode: try AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
+                maxAttempts: nil,
+                requestChecksumCalculation: try AWSClientConfigDefaultsProvider.requestChecksumCalculation(),
+                responseChecksumValidation: try AWSClientConfigDefaultsProvider.responseChecksumValidation(),
+                ignoreConfiguredEndpointURLs: nil,
+                region: region,
+                signingRegion: region,
+                endpointResolver: try DefaultEndpointResolver(),
+                telemetryProvider: ClientRuntime.DefaultTelemetry.provider,
+                retryStrategyOptions: try AWSClientConfigDefaultsProvider.retryStrategyOptions(),
+                clientLogMode: AWSClientConfigDefaultsProvider.clientLogMode(),
+                endpoint: nil,
+                idempotencyTokenGenerator: AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
+                httpClientEngine: AWSClientConfigDefaultsProvider.httpClientEngine(),
+                httpClientConfiguration: AWSClientConfigDefaultsProvider.httpClientConfiguration(),
+                authSchemes: [AWSSDKHTTPAuth.SigV4AuthScheme()],
+                authSchemePreference: nil,
+                authSchemeResolver: DefaultWAFRegionalAuthSchemeResolver(),
+                bearerTokenIdentityResolver: SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
+                interceptorProviders: [],
+                httpInterceptorProviders: []
             )
         }
 
@@ -348,12 +561,42 @@ extension WAFRegionalClient {
             return "\(WAFRegionalClient.clientName) - \(region ?? "")"
         }
 
+        public func toSendable() throws -> WAFRegionalClientConfig {
+            return try WAFRegionalClientConfig(
+                useFIPS: self.useFIPS,
+                useDualStack: self.useDualStack,
+                appID: self.appID,
+                awsCredentialIdentityResolver: self.awsCredentialIdentityResolver,
+                awsRetryMode: self.awsRetryMode,
+                maxAttempts: self.maxAttempts,
+                requestChecksumCalculation: self.requestChecksumCalculation,
+                responseChecksumValidation: self.responseChecksumValidation,
+                ignoreConfiguredEndpointURLs: self.ignoreConfiguredEndpointURLs,
+                region: self.region,
+                signingRegion: self.signingRegion,
+                endpointResolver: self.endpointResolver,
+                telemetryProvider: self.telemetryProvider,
+                retryStrategyOptions: self.retryStrategyOptions,
+                clientLogMode: self.clientLogMode,
+                endpoint: self.endpoint,
+                idempotencyTokenGenerator: self.idempotencyTokenGenerator,
+                httpClientEngine: self.httpClientEngine,
+                httpClientConfiguration: self.httpClientConfiguration,
+                authSchemes: self.authSchemes,
+                authSchemePreference: self.authSchemePreference,
+                authSchemeResolver: self.authSchemeResolver,
+                bearerTokenIdentityResolver: self.bearerTokenIdentityResolver,
+                interceptorProviders: self.interceptorProviders,
+                httpInterceptorProviders: self.httpInterceptorProviders
+            )
+        }
+
         public func addInterceptorProvider(_ provider: ClientRuntime.InterceptorProvider) {
-            self.interceptorProviders.append(provider)
+            self._interceptorProviders.append(ClientRuntime.SendableInterceptorProviderBox(provider))
         }
 
         public func addInterceptorProvider(_ provider: ClientRuntime.HttpInterceptorProvider) {
-            self.httpInterceptorProviders.append(provider)
+            self._httpInterceptorProviders.append(ClientRuntime.SendableHttpInterceptorProviderBox(provider))
         }
 
     }
@@ -437,7 +680,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<AssociateWebACLOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<AssociateWebACLInput, AssociateWebACLOutput>(xAmzTarget: "AWSWAF_Regional_20161128.AssociateWebACL"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<AssociateWebACLInput, AssociateWebACLOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.AssociateWebACL"]))
         builder.serialize(ClientRuntime.BodyMiddleware<AssociateWebACLInput, AssociateWebACLOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: AssociateWebACLInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<AssociateWebACLInput, AssociateWebACLOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<AssociateWebACLOutput>())
@@ -540,7 +783,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateByteMatchSetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateByteMatchSetInput, CreateByteMatchSetOutput>(xAmzTarget: "AWSWAF_Regional_20161128.CreateByteMatchSet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateByteMatchSetInput, CreateByteMatchSetOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.CreateByteMatchSet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateByteMatchSetInput, CreateByteMatchSetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateByteMatchSetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateByteMatchSetInput, CreateByteMatchSetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateByteMatchSetOutput>())
@@ -643,7 +886,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateGeoMatchSetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateGeoMatchSetInput, CreateGeoMatchSetOutput>(xAmzTarget: "AWSWAF_Regional_20161128.CreateGeoMatchSet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateGeoMatchSetInput, CreateGeoMatchSetOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.CreateGeoMatchSet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateGeoMatchSetInput, CreateGeoMatchSetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateGeoMatchSetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateGeoMatchSetInput, CreateGeoMatchSetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateGeoMatchSetOutput>())
@@ -746,7 +989,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateIPSetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateIPSetInput, CreateIPSetOutput>(xAmzTarget: "AWSWAF_Regional_20161128.CreateIPSet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateIPSetInput, CreateIPSetOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.CreateIPSet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateIPSetInput, CreateIPSetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateIPSetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateIPSetInput, CreateIPSetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateIPSetOutput>())
@@ -871,7 +1114,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateRateBasedRuleOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateRateBasedRuleInput, CreateRateBasedRuleOutput>(xAmzTarget: "AWSWAF_Regional_20161128.CreateRateBasedRule"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateRateBasedRuleInput, CreateRateBasedRuleOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.CreateRateBasedRule"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateRateBasedRuleInput, CreateRateBasedRuleOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateRateBasedRuleInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateRateBasedRuleInput, CreateRateBasedRuleOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateRateBasedRuleOutput>())
@@ -954,7 +1197,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateRegexMatchSetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateRegexMatchSetInput, CreateRegexMatchSetOutput>(xAmzTarget: "AWSWAF_Regional_20161128.CreateRegexMatchSet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateRegexMatchSetInput, CreateRegexMatchSetOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.CreateRegexMatchSet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateRegexMatchSetInput, CreateRegexMatchSetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateRegexMatchSetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateRegexMatchSetInput, CreateRegexMatchSetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateRegexMatchSetOutput>())
@@ -1037,7 +1280,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateRegexPatternSetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateRegexPatternSetInput, CreateRegexPatternSetOutput>(xAmzTarget: "AWSWAF_Regional_20161128.CreateRegexPatternSet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateRegexPatternSetInput, CreateRegexPatternSetOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.CreateRegexPatternSet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateRegexPatternSetInput, CreateRegexPatternSetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateRegexPatternSetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateRegexPatternSetInput, CreateRegexPatternSetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateRegexPatternSetOutput>())
@@ -1153,7 +1396,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateRuleOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateRuleInput, CreateRuleOutput>(xAmzTarget: "AWSWAF_Regional_20161128.CreateRule"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateRuleInput, CreateRuleOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.CreateRule"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateRuleInput, CreateRuleOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateRuleInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateRuleInput, CreateRuleOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateRuleOutput>())
@@ -1237,7 +1480,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateRuleGroupOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateRuleGroupInput, CreateRuleGroupOutput>(xAmzTarget: "AWSWAF_Regional_20161128.CreateRuleGroup"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateRuleGroupInput, CreateRuleGroupOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.CreateRuleGroup"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateRuleGroupInput, CreateRuleGroupOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateRuleGroupInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateRuleGroupInput, CreateRuleGroupOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateRuleGroupOutput>())
@@ -1340,7 +1583,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateSizeConstraintSetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateSizeConstraintSetInput, CreateSizeConstraintSetOutput>(xAmzTarget: "AWSWAF_Regional_20161128.CreateSizeConstraintSet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateSizeConstraintSetInput, CreateSizeConstraintSetOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.CreateSizeConstraintSet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateSizeConstraintSetInput, CreateSizeConstraintSetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateSizeConstraintSetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateSizeConstraintSetInput, CreateSizeConstraintSetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateSizeConstraintSetOutput>())
@@ -1443,7 +1686,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateSqlInjectionMatchSetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateSqlInjectionMatchSetInput, CreateSqlInjectionMatchSetOutput>(xAmzTarget: "AWSWAF_Regional_20161128.CreateSqlInjectionMatchSet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateSqlInjectionMatchSetInput, CreateSqlInjectionMatchSetOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.CreateSqlInjectionMatchSet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateSqlInjectionMatchSetInput, CreateSqlInjectionMatchSetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateSqlInjectionMatchSetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateSqlInjectionMatchSetInput, CreateSqlInjectionMatchSetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateSqlInjectionMatchSetOutput>())
@@ -1553,7 +1796,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateWebACLOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateWebACLInput, CreateWebACLOutput>(xAmzTarget: "AWSWAF_Regional_20161128.CreateWebACL"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateWebACLInput, CreateWebACLOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.CreateWebACL"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateWebACLInput, CreateWebACLOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateWebACLInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateWebACLInput, CreateWebACLOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateWebACLOutput>())
@@ -1668,7 +1911,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateWebACLMigrationStackOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateWebACLMigrationStackInput, CreateWebACLMigrationStackOutput>(xAmzTarget: "AWSWAF_Regional_20161128.CreateWebACLMigrationStack"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateWebACLMigrationStackInput, CreateWebACLMigrationStackOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.CreateWebACLMigrationStack"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateWebACLMigrationStackInput, CreateWebACLMigrationStackOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateWebACLMigrationStackInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateWebACLMigrationStackInput, CreateWebACLMigrationStackOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateWebACLMigrationStackOutput>())
@@ -1771,7 +2014,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateXssMatchSetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateXssMatchSetInput, CreateXssMatchSetOutput>(xAmzTarget: "AWSWAF_Regional_20161128.CreateXssMatchSet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateXssMatchSetInput, CreateXssMatchSetOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.CreateXssMatchSet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateXssMatchSetInput, CreateXssMatchSetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateXssMatchSetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateXssMatchSetInput, CreateXssMatchSetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateXssMatchSetOutput>())
@@ -1863,7 +2106,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteByteMatchSetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteByteMatchSetInput, DeleteByteMatchSetOutput>(xAmzTarget: "AWSWAF_Regional_20161128.DeleteByteMatchSet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteByteMatchSetInput, DeleteByteMatchSetOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.DeleteByteMatchSet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteByteMatchSetInput, DeleteByteMatchSetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteByteMatchSetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteByteMatchSetInput, DeleteByteMatchSetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteByteMatchSetOutput>())
@@ -1955,7 +2198,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteGeoMatchSetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteGeoMatchSetInput, DeleteGeoMatchSetOutput>(xAmzTarget: "AWSWAF_Regional_20161128.DeleteGeoMatchSet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteGeoMatchSetInput, DeleteGeoMatchSetOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.DeleteGeoMatchSet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteGeoMatchSetInput, DeleteGeoMatchSetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteGeoMatchSetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteGeoMatchSetInput, DeleteGeoMatchSetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteGeoMatchSetOutput>())
@@ -2047,7 +2290,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteIPSetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteIPSetInput, DeleteIPSetOutput>(xAmzTarget: "AWSWAF_Regional_20161128.DeleteIPSet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteIPSetInput, DeleteIPSetOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.DeleteIPSet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteIPSetInput, DeleteIPSetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteIPSetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteIPSetInput, DeleteIPSetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteIPSetOutput>())
@@ -2118,7 +2361,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteLoggingConfigurationOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteLoggingConfigurationInput, DeleteLoggingConfigurationOutput>(xAmzTarget: "AWSWAF_Regional_20161128.DeleteLoggingConfiguration"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteLoggingConfigurationInput, DeleteLoggingConfigurationOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.DeleteLoggingConfiguration"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteLoggingConfigurationInput, DeleteLoggingConfigurationOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteLoggingConfigurationInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteLoggingConfigurationInput, DeleteLoggingConfigurationOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteLoggingConfigurationOutput>())
@@ -2189,7 +2432,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeletePermissionPolicyOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeletePermissionPolicyInput, DeletePermissionPolicyOutput>(xAmzTarget: "AWSWAF_Regional_20161128.DeletePermissionPolicy"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeletePermissionPolicyInput, DeletePermissionPolicyOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.DeletePermissionPolicy"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeletePermissionPolicyInput, DeletePermissionPolicyOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeletePermissionPolicyInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeletePermissionPolicyInput, DeletePermissionPolicyOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeletePermissionPolicyOutput>())
@@ -2283,7 +2526,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteRateBasedRuleOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteRateBasedRuleInput, DeleteRateBasedRuleOutput>(xAmzTarget: "AWSWAF_Regional_20161128.DeleteRateBasedRule"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteRateBasedRuleInput, DeleteRateBasedRuleOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.DeleteRateBasedRule"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteRateBasedRuleInput, DeleteRateBasedRuleOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteRateBasedRuleInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteRateBasedRuleInput, DeleteRateBasedRuleOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteRateBasedRuleOutput>())
@@ -2375,7 +2618,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteRegexMatchSetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteRegexMatchSetInput, DeleteRegexMatchSetOutput>(xAmzTarget: "AWSWAF_Regional_20161128.DeleteRegexMatchSet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteRegexMatchSetInput, DeleteRegexMatchSetOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.DeleteRegexMatchSet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteRegexMatchSetInput, DeleteRegexMatchSetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteRegexMatchSetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteRegexMatchSetInput, DeleteRegexMatchSetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteRegexMatchSetOutput>())
@@ -2461,7 +2704,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteRegexPatternSetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteRegexPatternSetInput, DeleteRegexPatternSetOutput>(xAmzTarget: "AWSWAF_Regional_20161128.DeleteRegexPatternSet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteRegexPatternSetInput, DeleteRegexPatternSetOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.DeleteRegexPatternSet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteRegexPatternSetInput, DeleteRegexPatternSetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteRegexPatternSetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteRegexPatternSetInput, DeleteRegexPatternSetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteRegexPatternSetOutput>())
@@ -2555,7 +2798,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteRuleOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteRuleInput, DeleteRuleOutput>(xAmzTarget: "AWSWAF_Regional_20161128.DeleteRule"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteRuleInput, DeleteRuleOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.DeleteRule"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteRuleInput, DeleteRuleOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteRuleInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteRuleInput, DeleteRuleOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteRuleOutput>())
@@ -2659,7 +2902,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteRuleGroupOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteRuleGroupInput, DeleteRuleGroupOutput>(xAmzTarget: "AWSWAF_Regional_20161128.DeleteRuleGroup"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteRuleGroupInput, DeleteRuleGroupOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.DeleteRuleGroup"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteRuleGroupInput, DeleteRuleGroupOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteRuleGroupInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteRuleGroupInput, DeleteRuleGroupOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteRuleGroupOutput>())
@@ -2751,7 +2994,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteSizeConstraintSetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteSizeConstraintSetInput, DeleteSizeConstraintSetOutput>(xAmzTarget: "AWSWAF_Regional_20161128.DeleteSizeConstraintSet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteSizeConstraintSetInput, DeleteSizeConstraintSetOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.DeleteSizeConstraintSet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteSizeConstraintSetInput, DeleteSizeConstraintSetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteSizeConstraintSetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteSizeConstraintSetInput, DeleteSizeConstraintSetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteSizeConstraintSetOutput>())
@@ -2843,7 +3086,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteSqlInjectionMatchSetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteSqlInjectionMatchSetInput, DeleteSqlInjectionMatchSetOutput>(xAmzTarget: "AWSWAF_Regional_20161128.DeleteSqlInjectionMatchSet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteSqlInjectionMatchSetInput, DeleteSqlInjectionMatchSetOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.DeleteSqlInjectionMatchSet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteSqlInjectionMatchSetInput, DeleteSqlInjectionMatchSetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteSqlInjectionMatchSetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteSqlInjectionMatchSetInput, DeleteSqlInjectionMatchSetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteSqlInjectionMatchSetOutput>())
@@ -2937,7 +3180,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteWebACLOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteWebACLInput, DeleteWebACLOutput>(xAmzTarget: "AWSWAF_Regional_20161128.DeleteWebACL"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteWebACLInput, DeleteWebACLOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.DeleteWebACL"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteWebACLInput, DeleteWebACLOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteWebACLInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteWebACLInput, DeleteWebACLOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteWebACLOutput>())
@@ -3029,7 +3272,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteXssMatchSetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteXssMatchSetInput, DeleteXssMatchSetOutput>(xAmzTarget: "AWSWAF_Regional_20161128.DeleteXssMatchSet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteXssMatchSetInput, DeleteXssMatchSetOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.DeleteXssMatchSet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteXssMatchSetInput, DeleteXssMatchSetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteXssMatchSetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteXssMatchSetInput, DeleteXssMatchSetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteXssMatchSetOutput>())
@@ -3119,7 +3362,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DisassociateWebACLOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DisassociateWebACLInput, DisassociateWebACLOutput>(xAmzTarget: "AWSWAF_Regional_20161128.DisassociateWebACL"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DisassociateWebACLInput, DisassociateWebACLOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.DisassociateWebACL"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DisassociateWebACLInput, DisassociateWebACLOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DisassociateWebACLInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DisassociateWebACLInput, DisassociateWebACLOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DisassociateWebACLOutput>())
@@ -3190,7 +3433,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetByteMatchSetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetByteMatchSetInput, GetByteMatchSetOutput>(xAmzTarget: "AWSWAF_Regional_20161128.GetByteMatchSet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetByteMatchSetInput, GetByteMatchSetOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.GetByteMatchSet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetByteMatchSetInput, GetByteMatchSetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetByteMatchSetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetByteMatchSetInput, GetByteMatchSetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetByteMatchSetOutput>())
@@ -3259,7 +3502,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetChangeTokenOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetChangeTokenInput, GetChangeTokenOutput>(xAmzTarget: "AWSWAF_Regional_20161128.GetChangeToken"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetChangeTokenInput, GetChangeTokenOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.GetChangeToken"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetChangeTokenInput, GetChangeTokenOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetChangeTokenInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetChangeTokenInput, GetChangeTokenOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetChangeTokenOutput>())
@@ -3335,7 +3578,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetChangeTokenStatusOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetChangeTokenStatusInput, GetChangeTokenStatusOutput>(xAmzTarget: "AWSWAF_Regional_20161128.GetChangeTokenStatus"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetChangeTokenStatusInput, GetChangeTokenStatusOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.GetChangeTokenStatus"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetChangeTokenStatusInput, GetChangeTokenStatusOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetChangeTokenStatusInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetChangeTokenStatusInput, GetChangeTokenStatusOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetChangeTokenStatusOutput>())
@@ -3406,7 +3649,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetGeoMatchSetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetGeoMatchSetInput, GetGeoMatchSetOutput>(xAmzTarget: "AWSWAF_Regional_20161128.GetGeoMatchSet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetGeoMatchSetInput, GetGeoMatchSetOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.GetGeoMatchSet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetGeoMatchSetInput, GetGeoMatchSetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetGeoMatchSetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetGeoMatchSetInput, GetGeoMatchSetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetGeoMatchSetOutput>())
@@ -3477,7 +3720,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetIPSetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetIPSetInput, GetIPSetOutput>(xAmzTarget: "AWSWAF_Regional_20161128.GetIPSet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetIPSetInput, GetIPSetOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.GetIPSet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetIPSetInput, GetIPSetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetIPSetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetIPSetInput, GetIPSetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetIPSetOutput>())
@@ -3547,7 +3790,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetLoggingConfigurationOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetLoggingConfigurationInput, GetLoggingConfigurationOutput>(xAmzTarget: "AWSWAF_Regional_20161128.GetLoggingConfiguration"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetLoggingConfigurationInput, GetLoggingConfigurationOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.GetLoggingConfiguration"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetLoggingConfigurationInput, GetLoggingConfigurationOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetLoggingConfigurationInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetLoggingConfigurationInput, GetLoggingConfigurationOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetLoggingConfigurationOutput>())
@@ -3617,7 +3860,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetPermissionPolicyOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetPermissionPolicyInput, GetPermissionPolicyOutput>(xAmzTarget: "AWSWAF_Regional_20161128.GetPermissionPolicy"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetPermissionPolicyInput, GetPermissionPolicyOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.GetPermissionPolicy"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetPermissionPolicyInput, GetPermissionPolicyOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetPermissionPolicyInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetPermissionPolicyInput, GetPermissionPolicyOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetPermissionPolicyOutput>())
@@ -3688,7 +3931,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetRateBasedRuleOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetRateBasedRuleInput, GetRateBasedRuleOutput>(xAmzTarget: "AWSWAF_Regional_20161128.GetRateBasedRule"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetRateBasedRuleInput, GetRateBasedRuleOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.GetRateBasedRule"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetRateBasedRuleInput, GetRateBasedRuleOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetRateBasedRuleInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetRateBasedRuleInput, GetRateBasedRuleOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetRateBasedRuleOutput>())
@@ -3778,7 +4021,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetRateBasedRuleManagedKeysOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetRateBasedRuleManagedKeysInput, GetRateBasedRuleManagedKeysOutput>(xAmzTarget: "AWSWAF_Regional_20161128.GetRateBasedRuleManagedKeys"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetRateBasedRuleManagedKeysInput, GetRateBasedRuleManagedKeysOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.GetRateBasedRuleManagedKeys"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetRateBasedRuleManagedKeysInput, GetRateBasedRuleManagedKeysOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetRateBasedRuleManagedKeysInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetRateBasedRuleManagedKeysInput, GetRateBasedRuleManagedKeysOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetRateBasedRuleManagedKeysOutput>())
@@ -3849,7 +4092,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetRegexMatchSetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetRegexMatchSetInput, GetRegexMatchSetOutput>(xAmzTarget: "AWSWAF_Regional_20161128.GetRegexMatchSet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetRegexMatchSetInput, GetRegexMatchSetOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.GetRegexMatchSet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetRegexMatchSetInput, GetRegexMatchSetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetRegexMatchSetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetRegexMatchSetInput, GetRegexMatchSetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetRegexMatchSetOutput>())
@@ -3920,7 +4163,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetRegexPatternSetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetRegexPatternSetInput, GetRegexPatternSetOutput>(xAmzTarget: "AWSWAF_Regional_20161128.GetRegexPatternSet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetRegexPatternSetInput, GetRegexPatternSetOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.GetRegexPatternSet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetRegexPatternSetInput, GetRegexPatternSetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetRegexPatternSetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetRegexPatternSetInput, GetRegexPatternSetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetRegexPatternSetOutput>())
@@ -3991,7 +4234,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetRuleOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetRuleInput, GetRuleOutput>(xAmzTarget: "AWSWAF_Regional_20161128.GetRule"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetRuleInput, GetRuleOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.GetRule"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetRuleInput, GetRuleOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetRuleInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetRuleInput, GetRuleOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetRuleOutput>())
@@ -4061,7 +4304,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetRuleGroupOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetRuleGroupInput, GetRuleGroupOutput>(xAmzTarget: "AWSWAF_Regional_20161128.GetRuleGroup"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetRuleGroupInput, GetRuleGroupOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.GetRuleGroup"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetRuleGroupInput, GetRuleGroupOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetRuleGroupInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetRuleGroupInput, GetRuleGroupOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetRuleGroupOutput>())
@@ -4131,7 +4374,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetSampledRequestsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetSampledRequestsInput, GetSampledRequestsOutput>(xAmzTarget: "AWSWAF_Regional_20161128.GetSampledRequests"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetSampledRequestsInput, GetSampledRequestsOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.GetSampledRequests"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetSampledRequestsInput, GetSampledRequestsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetSampledRequestsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetSampledRequestsInput, GetSampledRequestsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetSampledRequestsOutput>())
@@ -4202,7 +4445,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetSizeConstraintSetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetSizeConstraintSetInput, GetSizeConstraintSetOutput>(xAmzTarget: "AWSWAF_Regional_20161128.GetSizeConstraintSet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetSizeConstraintSetInput, GetSizeConstraintSetOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.GetSizeConstraintSet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetSizeConstraintSetInput, GetSizeConstraintSetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetSizeConstraintSetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetSizeConstraintSetInput, GetSizeConstraintSetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetSizeConstraintSetOutput>())
@@ -4273,7 +4516,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetSqlInjectionMatchSetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetSqlInjectionMatchSetInput, GetSqlInjectionMatchSetOutput>(xAmzTarget: "AWSWAF_Regional_20161128.GetSqlInjectionMatchSet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetSqlInjectionMatchSetInput, GetSqlInjectionMatchSetOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.GetSqlInjectionMatchSet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetSqlInjectionMatchSetInput, GetSqlInjectionMatchSetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetSqlInjectionMatchSetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetSqlInjectionMatchSetInput, GetSqlInjectionMatchSetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetSqlInjectionMatchSetOutput>())
@@ -4344,7 +4587,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetWebACLOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetWebACLInput, GetWebACLOutput>(xAmzTarget: "AWSWAF_Regional_20161128.GetWebACL"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetWebACLInput, GetWebACLOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.GetWebACL"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetWebACLInput, GetWebACLOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetWebACLInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetWebACLInput, GetWebACLOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetWebACLOutput>())
@@ -4435,7 +4678,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetWebACLForResourceOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetWebACLForResourceInput, GetWebACLForResourceOutput>(xAmzTarget: "AWSWAF_Regional_20161128.GetWebACLForResource"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetWebACLForResourceInput, GetWebACLForResourceOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.GetWebACLForResource"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetWebACLForResourceInput, GetWebACLForResourceOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetWebACLForResourceInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetWebACLForResourceInput, GetWebACLForResourceOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetWebACLForResourceOutput>())
@@ -4506,7 +4749,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetXssMatchSetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetXssMatchSetInput, GetXssMatchSetOutput>(xAmzTarget: "AWSWAF_Regional_20161128.GetXssMatchSet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetXssMatchSetInput, GetXssMatchSetOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.GetXssMatchSet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetXssMatchSetInput, GetXssMatchSetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetXssMatchSetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetXssMatchSetInput, GetXssMatchSetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetXssMatchSetOutput>())
@@ -4595,7 +4838,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListActivatedRulesInRuleGroupOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListActivatedRulesInRuleGroupInput, ListActivatedRulesInRuleGroupOutput>(xAmzTarget: "AWSWAF_Regional_20161128.ListActivatedRulesInRuleGroup"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListActivatedRulesInRuleGroupInput, ListActivatedRulesInRuleGroupOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.ListActivatedRulesInRuleGroup"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListActivatedRulesInRuleGroupInput, ListActivatedRulesInRuleGroupOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListActivatedRulesInRuleGroupInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListActivatedRulesInRuleGroupInput, ListActivatedRulesInRuleGroupOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListActivatedRulesInRuleGroupOutput>())
@@ -4665,7 +4908,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListByteMatchSetsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListByteMatchSetsInput, ListByteMatchSetsOutput>(xAmzTarget: "AWSWAF_Regional_20161128.ListByteMatchSets"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListByteMatchSetsInput, ListByteMatchSetsOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.ListByteMatchSets"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListByteMatchSetsInput, ListByteMatchSetsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListByteMatchSetsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListByteMatchSetsInput, ListByteMatchSetsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListByteMatchSetsOutput>())
@@ -4735,7 +4978,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListGeoMatchSetsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListGeoMatchSetsInput, ListGeoMatchSetsOutput>(xAmzTarget: "AWSWAF_Regional_20161128.ListGeoMatchSets"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListGeoMatchSetsInput, ListGeoMatchSetsOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.ListGeoMatchSets"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListGeoMatchSetsInput, ListGeoMatchSetsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListGeoMatchSetsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListGeoMatchSetsInput, ListGeoMatchSetsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListGeoMatchSetsOutput>())
@@ -4805,7 +5048,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListIPSetsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListIPSetsInput, ListIPSetsOutput>(xAmzTarget: "AWSWAF_Regional_20161128.ListIPSets"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListIPSetsInput, ListIPSetsOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.ListIPSets"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListIPSetsInput, ListIPSetsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListIPSetsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListIPSetsInput, ListIPSetsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListIPSetsOutput>())
@@ -4894,7 +5137,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListLoggingConfigurationsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListLoggingConfigurationsInput, ListLoggingConfigurationsOutput>(xAmzTarget: "AWSWAF_Regional_20161128.ListLoggingConfigurations"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListLoggingConfigurationsInput, ListLoggingConfigurationsOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.ListLoggingConfigurations"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListLoggingConfigurationsInput, ListLoggingConfigurationsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListLoggingConfigurationsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListLoggingConfigurationsInput, ListLoggingConfigurationsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListLoggingConfigurationsOutput>())
@@ -4964,7 +5207,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListRateBasedRulesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListRateBasedRulesInput, ListRateBasedRulesOutput>(xAmzTarget: "AWSWAF_Regional_20161128.ListRateBasedRules"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListRateBasedRulesInput, ListRateBasedRulesOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.ListRateBasedRules"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListRateBasedRulesInput, ListRateBasedRulesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListRateBasedRulesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListRateBasedRulesInput, ListRateBasedRulesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListRateBasedRulesOutput>())
@@ -5034,7 +5277,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListRegexMatchSetsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListRegexMatchSetsInput, ListRegexMatchSetsOutput>(xAmzTarget: "AWSWAF_Regional_20161128.ListRegexMatchSets"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListRegexMatchSetsInput, ListRegexMatchSetsOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.ListRegexMatchSets"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListRegexMatchSetsInput, ListRegexMatchSetsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListRegexMatchSetsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListRegexMatchSetsInput, ListRegexMatchSetsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListRegexMatchSetsOutput>())
@@ -5104,7 +5347,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListRegexPatternSetsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListRegexPatternSetsInput, ListRegexPatternSetsOutput>(xAmzTarget: "AWSWAF_Regional_20161128.ListRegexPatternSets"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListRegexPatternSetsInput, ListRegexPatternSetsOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.ListRegexPatternSets"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListRegexPatternSetsInput, ListRegexPatternSetsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListRegexPatternSetsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListRegexPatternSetsInput, ListRegexPatternSetsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListRegexPatternSetsOutput>())
@@ -5194,7 +5437,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListResourcesForWebACLOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListResourcesForWebACLInput, ListResourcesForWebACLOutput>(xAmzTarget: "AWSWAF_Regional_20161128.ListResourcesForWebACL"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListResourcesForWebACLInput, ListResourcesForWebACLOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.ListResourcesForWebACL"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListResourcesForWebACLInput, ListResourcesForWebACLOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListResourcesForWebACLInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListResourcesForWebACLInput, ListResourcesForWebACLOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListResourcesForWebACLOutput>())
@@ -5263,7 +5506,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListRuleGroupsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListRuleGroupsInput, ListRuleGroupsOutput>(xAmzTarget: "AWSWAF_Regional_20161128.ListRuleGroups"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListRuleGroupsInput, ListRuleGroupsOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.ListRuleGroups"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListRuleGroupsInput, ListRuleGroupsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListRuleGroupsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListRuleGroupsInput, ListRuleGroupsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListRuleGroupsOutput>())
@@ -5333,7 +5576,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListRulesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListRulesInput, ListRulesOutput>(xAmzTarget: "AWSWAF_Regional_20161128.ListRules"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListRulesInput, ListRulesOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.ListRules"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListRulesInput, ListRulesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListRulesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListRulesInput, ListRulesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListRulesOutput>())
@@ -5403,7 +5646,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListSizeConstraintSetsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListSizeConstraintSetsInput, ListSizeConstraintSetsOutput>(xAmzTarget: "AWSWAF_Regional_20161128.ListSizeConstraintSets"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListSizeConstraintSetsInput, ListSizeConstraintSetsOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.ListSizeConstraintSets"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListSizeConstraintSetsInput, ListSizeConstraintSetsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListSizeConstraintSetsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListSizeConstraintSetsInput, ListSizeConstraintSetsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListSizeConstraintSetsOutput>())
@@ -5473,7 +5716,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListSqlInjectionMatchSetsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListSqlInjectionMatchSetsInput, ListSqlInjectionMatchSetsOutput>(xAmzTarget: "AWSWAF_Regional_20161128.ListSqlInjectionMatchSets"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListSqlInjectionMatchSetsInput, ListSqlInjectionMatchSetsOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.ListSqlInjectionMatchSets"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListSqlInjectionMatchSetsInput, ListSqlInjectionMatchSetsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListSqlInjectionMatchSetsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListSqlInjectionMatchSetsInput, ListSqlInjectionMatchSetsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListSqlInjectionMatchSetsOutput>())
@@ -5543,7 +5786,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListSubscribedRuleGroupsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListSubscribedRuleGroupsInput, ListSubscribedRuleGroupsOutput>(xAmzTarget: "AWSWAF_Regional_20161128.ListSubscribedRuleGroups"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListSubscribedRuleGroupsInput, ListSubscribedRuleGroupsOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.ListSubscribedRuleGroups"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListSubscribedRuleGroupsInput, ListSubscribedRuleGroupsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListSubscribedRuleGroupsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListSubscribedRuleGroupsInput, ListSubscribedRuleGroupsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListSubscribedRuleGroupsOutput>())
@@ -5635,7 +5878,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListTagsForResourceOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListTagsForResourceInput, ListTagsForResourceOutput>(xAmzTarget: "AWSWAF_Regional_20161128.ListTagsForResource"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListTagsForResourceInput, ListTagsForResourceOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.ListTagsForResource"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListTagsForResourceInput, ListTagsForResourceOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListTagsForResourceInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListTagsForResourceInput, ListTagsForResourceOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListTagsForResourceOutput>())
@@ -5705,7 +5948,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListWebACLsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListWebACLsInput, ListWebACLsOutput>(xAmzTarget: "AWSWAF_Regional_20161128.ListWebACLs"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListWebACLsInput, ListWebACLsOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.ListWebACLs"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListWebACLsInput, ListWebACLsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListWebACLsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListWebACLsInput, ListWebACLsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListWebACLsOutput>())
@@ -5775,7 +6018,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListXssMatchSetsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListXssMatchSetsInput, ListXssMatchSetsOutput>(xAmzTarget: "AWSWAF_Regional_20161128.ListXssMatchSets"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListXssMatchSetsInput, ListXssMatchSetsOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.ListXssMatchSets"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListXssMatchSetsInput, ListXssMatchSetsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListXssMatchSetsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListXssMatchSetsInput, ListXssMatchSetsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListXssMatchSetsOutput>())
@@ -5854,7 +6097,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<PutLoggingConfigurationOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<PutLoggingConfigurationInput, PutLoggingConfigurationOutput>(xAmzTarget: "AWSWAF_Regional_20161128.PutLoggingConfiguration"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<PutLoggingConfigurationInput, PutLoggingConfigurationOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.PutLoggingConfiguration"]))
         builder.serialize(ClientRuntime.BodyMiddleware<PutLoggingConfigurationInput, PutLoggingConfigurationOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: PutLoggingConfigurationInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<PutLoggingConfigurationInput, PutLoggingConfigurationOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<PutLoggingConfigurationOutput>())
@@ -5964,7 +6207,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<PutPermissionPolicyOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<PutPermissionPolicyInput, PutPermissionPolicyOutput>(xAmzTarget: "AWSWAF_Regional_20161128.PutPermissionPolicy"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<PutPermissionPolicyInput, PutPermissionPolicyOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.PutPermissionPolicy"]))
         builder.serialize(ClientRuntime.BodyMiddleware<PutPermissionPolicyInput, PutPermissionPolicyOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: PutPermissionPolicyInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<PutPermissionPolicyInput, PutPermissionPolicyOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<PutPermissionPolicyOutput>())
@@ -6057,7 +6300,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<TagResourceOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<TagResourceInput, TagResourceOutput>(xAmzTarget: "AWSWAF_Regional_20161128.TagResource"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<TagResourceInput, TagResourceOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.TagResource"]))
         builder.serialize(ClientRuntime.BodyMiddleware<TagResourceInput, TagResourceOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: TagResourceInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<TagResourceInput, TagResourceOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<TagResourceOutput>())
@@ -6149,7 +6392,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UntagResourceOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UntagResourceInput, UntagResourceOutput>(xAmzTarget: "AWSWAF_Regional_20161128.UntagResource"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UntagResourceInput, UntagResourceOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.UntagResource"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UntagResourceInput, UntagResourceOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UntagResourceInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UntagResourceInput, UntagResourceOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UntagResourceOutput>())
@@ -6283,7 +6526,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateByteMatchSetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateByteMatchSetInput, UpdateByteMatchSetOutput>(xAmzTarget: "AWSWAF_Regional_20161128.UpdateByteMatchSet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateByteMatchSetInput, UpdateByteMatchSetOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.UpdateByteMatchSet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateByteMatchSetInput, UpdateByteMatchSetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateByteMatchSetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateByteMatchSetInput, UpdateByteMatchSetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateByteMatchSetOutput>())
@@ -6418,7 +6661,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateGeoMatchSetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateGeoMatchSetInput, UpdateGeoMatchSetOutput>(xAmzTarget: "AWSWAF_Regional_20161128.UpdateGeoMatchSet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateGeoMatchSetInput, UpdateGeoMatchSetOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.UpdateGeoMatchSet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateGeoMatchSetInput, UpdateGeoMatchSetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateGeoMatchSetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateGeoMatchSetInput, UpdateGeoMatchSetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateGeoMatchSetOutput>())
@@ -6564,7 +6807,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateIPSetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateIPSetInput, UpdateIPSetOutput>(xAmzTarget: "AWSWAF_Regional_20161128.UpdateIPSet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateIPSetInput, UpdateIPSetOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.UpdateIPSet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateIPSetInput, UpdateIPSetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateIPSetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateIPSetInput, UpdateIPSetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateIPSetOutput>())
@@ -6697,7 +6940,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateRateBasedRuleOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateRateBasedRuleInput, UpdateRateBasedRuleOutput>(xAmzTarget: "AWSWAF_Regional_20161128.UpdateRateBasedRule"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateRateBasedRuleInput, UpdateRateBasedRuleOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.UpdateRateBasedRule"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateRateBasedRuleInput, UpdateRateBasedRuleOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateRateBasedRuleInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateRateBasedRuleInput, UpdateRateBasedRuleOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateRateBasedRuleOutput>())
@@ -6811,7 +7054,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateRegexMatchSetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateRegexMatchSetInput, UpdateRegexMatchSetOutput>(xAmzTarget: "AWSWAF_Regional_20161128.UpdateRegexMatchSet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateRegexMatchSetInput, UpdateRegexMatchSetOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.UpdateRegexMatchSet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateRegexMatchSetInput, UpdateRegexMatchSetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateRegexMatchSetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateRegexMatchSetInput, UpdateRegexMatchSetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateRegexMatchSetOutput>())
@@ -6932,7 +7175,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateRegexPatternSetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateRegexPatternSetInput, UpdateRegexPatternSetOutput>(xAmzTarget: "AWSWAF_Regional_20161128.UpdateRegexPatternSet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateRegexPatternSetInput, UpdateRegexPatternSetOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.UpdateRegexPatternSet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateRegexPatternSetInput, UpdateRegexPatternSetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateRegexPatternSetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateRegexPatternSetInput, UpdateRegexPatternSetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateRegexPatternSetOutput>())
@@ -7069,7 +7312,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateRuleOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateRuleInput, UpdateRuleOutput>(xAmzTarget: "AWSWAF_Regional_20161128.UpdateRule"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateRuleInput, UpdateRuleOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.UpdateRule"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateRuleInput, UpdateRuleOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateRuleInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateRuleInput, UpdateRuleOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateRuleOutput>())
@@ -7191,7 +7434,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateRuleGroupOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateRuleGroupInput, UpdateRuleGroupOutput>(xAmzTarget: "AWSWAF_Regional_20161128.UpdateRuleGroup"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateRuleGroupInput, UpdateRuleGroupOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.UpdateRuleGroup"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateRuleGroupInput, UpdateRuleGroupOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateRuleGroupInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateRuleGroupInput, UpdateRuleGroupOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateRuleGroupOutput>())
@@ -7330,7 +7573,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateSizeConstraintSetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateSizeConstraintSetInput, UpdateSizeConstraintSetOutput>(xAmzTarget: "AWSWAF_Regional_20161128.UpdateSizeConstraintSet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateSizeConstraintSetInput, UpdateSizeConstraintSetOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.UpdateSizeConstraintSet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateSizeConstraintSetInput, UpdateSizeConstraintSetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateSizeConstraintSetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateSizeConstraintSetInput, UpdateSizeConstraintSetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateSizeConstraintSetOutput>())
@@ -7460,7 +7703,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateSqlInjectionMatchSetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateSqlInjectionMatchSetInput, UpdateSqlInjectionMatchSetOutput>(xAmzTarget: "AWSWAF_Regional_20161128.UpdateSqlInjectionMatchSet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateSqlInjectionMatchSetInput, UpdateSqlInjectionMatchSetOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.UpdateSqlInjectionMatchSet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateSqlInjectionMatchSetInput, UpdateSqlInjectionMatchSetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateSqlInjectionMatchSetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateSqlInjectionMatchSetInput, UpdateSqlInjectionMatchSetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateSqlInjectionMatchSetOutput>())
@@ -7602,7 +7845,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateWebACLOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateWebACLInput, UpdateWebACLOutput>(xAmzTarget: "AWSWAF_Regional_20161128.UpdateWebACL"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateWebACLInput, UpdateWebACLOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.UpdateWebACL"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateWebACLInput, UpdateWebACLOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateWebACLInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateWebACLInput, UpdateWebACLOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateWebACLOutput>())
@@ -7732,7 +7975,7 @@ extension WAFRegionalClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateXssMatchSetOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateXssMatchSetInput, UpdateXssMatchSetOutput>(xAmzTarget: "AWSWAF_Regional_20161128.UpdateXssMatchSet"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateXssMatchSetInput, UpdateXssMatchSetOutput>(overrides: ["X-Amz-Target": "AWSWAF_Regional_20161128.UpdateXssMatchSet"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateXssMatchSetInput, UpdateXssMatchSetOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateXssMatchSetInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateXssMatchSetInput, UpdateXssMatchSetOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateXssMatchSetOutput>())

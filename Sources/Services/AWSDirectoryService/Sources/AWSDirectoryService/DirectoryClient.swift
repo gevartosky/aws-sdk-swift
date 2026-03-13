@@ -30,6 +30,7 @@ import enum AWSSDKChecksums.AWSChecksumCalculationMode
 import enum ClientRuntime.ClientLogMode
 import enum ClientRuntime.DefaultTelemetry
 import enum ClientRuntime.OrchestratorMetricsAttributesKeys
+import func ClientRuntime.initialize
 import protocol AWSClientRuntime.AWSDefaultClientConfiguration
 import protocol AWSClientRuntime.AWSRegionClientConfiguration
 import protocol AWSClientRuntime.AWSServiceClient
@@ -48,7 +49,6 @@ import protocol SmithyIdentity.BearerTokenIdentityResolver
 @_spi(AWSEndpointResolverMiddleware) import struct AWSClientRuntime.AWSEndpointResolverMiddleware
 import struct AWSClientRuntime.AmzSdkInvocationIdMiddleware
 import struct AWSClientRuntime.UserAgentMiddleware
-import struct AWSClientRuntime.XAmzTargetMiddleware
 import struct AWSSDKHTTPAuth.SigV4AuthScheme
 import struct ClientRuntime.AuthSchemeMiddleware
 @_spi(SmithyReadWrite) import struct ClientRuntime.BodyMiddleware
@@ -56,6 +56,9 @@ import struct ClientRuntime.ContentLengthMiddleware
 import struct ClientRuntime.ContentTypeMiddleware
 @_spi(SmithyReadWrite) import struct ClientRuntime.DeserializeMiddleware
 import struct ClientRuntime.LoggerMiddleware
+import struct ClientRuntime.MutateHeadersMiddleware
+import struct ClientRuntime.SendableHttpInterceptorProviderBox
+import struct ClientRuntime.SendableInterceptorProviderBox
 import struct ClientRuntime.SignerMiddleware
 import struct ClientRuntime.URLHostMiddleware
 import struct ClientRuntime.URLPathMiddleware
@@ -66,31 +69,49 @@ import struct SmithyRetries.DefaultRetryStrategy
 import struct SmithyRetriesAPI.RetryStrategyOptions
 import typealias SmithyHTTPAuthAPI.AuthSchemes
 
-public class DirectoryClient: AWSClientRuntime.AWSServiceClient {
+public final class DirectoryClient: AWSClientRuntime.AWSServiceClient {
     public static let clientName = "DirectoryClient"
     let client: ClientRuntime.SdkHttpClient
-    let config: DirectoryClient.DirectoryClientConfiguration
+    public let config: DirectoryClient.DirectoryClientConfig
     let serviceName = "Directory"
 
-    public required init(config: DirectoryClient.DirectoryClientConfiguration) {
+    @available(*, deprecated, message: "Use DirectoryClient.DirectoryClientConfig instead")
+    public typealias Config = DirectoryClient.DirectoryClientConfiguration
+    public typealias Configuration = DirectoryClient.DirectoryClientConfig
+
+    public required init(config: DirectoryClient.DirectoryClientConfig) {
+        ClientRuntime.initialize()
         client = ClientRuntime.SdkHttpClient(engine: config.httpClientEngine, config: config.httpClientConfiguration)
         self.config = config
     }
 
+    @available(*, deprecated, message: "Use init(config: DirectoryClient.DirectoryClientConfig) instead")
+    public convenience init(config: DirectoryClient.DirectoryClientConfiguration) {
+        do {
+            try self.init(config: config.toSendable())
+        } catch {
+            // This should never happen since all values are already initialized in the class
+            fatalError("Failed to convert deprecated configuration: \(error)")
+        }
+    }
+
     public convenience init(region: Swift.String) throws {
-        let config = try DirectoryClient.DirectoryClientConfiguration(region: region)
+        let config = try DirectoryClient.DirectoryClientConfig(region: region)
         self.init(config: config)
     }
 
-    public convenience required init() async throws {
-        let config = try await DirectoryClient.DirectoryClientConfiguration()
+    public convenience init() async throws {
+        let config = try await DirectoryClient.DirectoryClientConfig()
         self.init(config: config)
     }
 }
 
 extension DirectoryClient {
 
-    public class DirectoryClientConfiguration: AWSClientRuntime.AWSDefaultClientConfiguration & AWSClientRuntime.AWSRegionClientConfiguration & ClientRuntime.DefaultClientConfiguration & ClientRuntime.DefaultHttpClientConfiguration {
+    /// Client configuration for DirectoryClient
+    ///
+    /// Conforms to `Sendable` for safe concurrent access across threads.
+    public struct DirectoryClientConfig: AWSClientRuntime.AWSDefaultClientConfiguration & AWSClientRuntime.AWSRegionClientConfiguration & ClientRuntime.DefaultClientConfiguration & ClientRuntime.DefaultHttpClientConfiguration, Swift.Sendable {
         public var useFIPS: Swift.Bool?
         public var useDualStack: Swift.Bool?
         public var appID: Swift.String?
@@ -114,66 +135,29 @@ extension DirectoryClient {
         public var authSchemePreference: [String]?
         public var authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver
         public var bearerTokenIdentityResolver: any SmithyIdentity.BearerTokenIdentityResolver
-        public private(set) var interceptorProviders: [ClientRuntime.InterceptorProvider]
-        public private(set) var httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]
-        public let logger: Smithy.LogAgent
-
-        private init(
-            _ useFIPS: Swift.Bool?,
-            _ useDualStack: Swift.Bool?,
-            _ appID: Swift.String?,
-            _ awsCredentialIdentityResolver: any SmithyIdentity.AWSCredentialIdentityResolver,
-            _ awsRetryMode: AWSClientRuntime.AWSRetryMode,
-            _ maxAttempts: Swift.Int?,
-            _ requestChecksumCalculation: AWSSDKChecksums.AWSChecksumCalculationMode,
-            _ responseChecksumValidation: AWSSDKChecksums.AWSChecksumCalculationMode,
-            _ ignoreConfiguredEndpointURLs: Swift.Bool?,
-            _ region: Swift.String?,
-            _ signingRegion: Swift.String?,
-            _ endpointResolver: EndpointResolver,
-            _ telemetryProvider: ClientRuntime.TelemetryProvider,
-            _ retryStrategyOptions: SmithyRetriesAPI.RetryStrategyOptions,
-            _ clientLogMode: ClientRuntime.ClientLogMode,
-            _ endpoint: Swift.String?,
-            _ idempotencyTokenGenerator: ClientRuntime.IdempotencyTokenGenerator,
-            _ httpClientEngine: SmithyHTTPAPI.HTTPClient,
-            _ httpClientConfiguration: ClientRuntime.HttpClientConfiguration,
-            _ authSchemes: SmithyHTTPAuthAPI.AuthSchemes?,
-            _ authSchemePreference: [String]?,
-            _ authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver,
-            _ bearerTokenIdentityResolver: any SmithyIdentity.BearerTokenIdentityResolver,
-            _ interceptorProviders: [ClientRuntime.InterceptorProvider],
-            _ httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]
-        ) {
-            self.useFIPS = useFIPS
-            self.useDualStack = useDualStack
-            self.appID = appID
-            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver
-            self.awsRetryMode = awsRetryMode
-            self.maxAttempts = maxAttempts
-            self.requestChecksumCalculation = requestChecksumCalculation
-            self.responseChecksumValidation = responseChecksumValidation
-            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
-            self.region = region
-            self.signingRegion = signingRegion
-            self.endpointResolver = endpointResolver
-            self.telemetryProvider = telemetryProvider
-            self.retryStrategyOptions = retryStrategyOptions
-            self.clientLogMode = clientLogMode
-            self.endpoint = endpoint
-            self.idempotencyTokenGenerator = idempotencyTokenGenerator
-            self.httpClientEngine = httpClientEngine
-            self.httpClientConfiguration = httpClientConfiguration
-            self.authSchemes = authSchemes
-            self.authSchemePreference = authSchemePreference
-            self.authSchemeResolver = authSchemeResolver
-            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver
-            self.interceptorProviders = interceptorProviders
-            self.httpInterceptorProviders = httpInterceptorProviders
-            self.logger = telemetryProvider.loggerProvider.getLogger(name: DirectoryClient.clientName)
+        // Interceptor providers with Sendable-safe internal storage
+        private var _interceptorProviders: [ClientRuntime.SendableInterceptorProviderBox] = []
+        public var interceptorProviders: [ClientRuntime.InterceptorProvider] {
+            get {
+                return _interceptorProviders
+            }
+            set {
+                _interceptorProviders = newValue.map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            }
         }
 
-        public convenience init(
+        private var _httpInterceptorProviders: [ClientRuntime.SendableHttpInterceptorProviderBox] = []
+        public var httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider] {
+            get {
+                return _httpInterceptorProviders
+            }
+            set {
+                _httpInterceptorProviders = newValue.map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            }
+        }
+        public var logger: Smithy.LogAgent
+
+        public init(
             useFIPS: Swift.Bool? = nil,
             useDualStack: Swift.Bool? = nil,
             appID: Swift.String? = nil,
@@ -200,36 +184,35 @@ extension DirectoryClient {
             interceptorProviders: [ClientRuntime.InterceptorProvider]? = nil,
             httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]? = nil
         ) throws {
-            self.init(
-                useFIPS,
-                useDualStack,
-                try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
-                awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
-                try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
-                maxAttempts,
-                try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation),
-                try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation),
-                ignoreConfiguredEndpointURLs,
-                region,
-                signingRegion,
-                try endpointResolver ?? DefaultEndpointResolver(),
-                telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider,
-                try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts),
-                clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode(),
-                endpoint,
-                idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
-                httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration),
-                httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration(),
-                authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()],
-                authSchemePreference ?? nil,
-                authSchemeResolver ?? DefaultDirectoryServiceAuthSchemeResolver(),
-                bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
-                interceptorProviders ?? [],
-                httpInterceptorProviders ?? []
-            )
+            self.useFIPS = useFIPS
+            self.useDualStack = useDualStack
+            self.appID = try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID()
+            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain()
+            self.awsRetryMode = try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode()
+            self.maxAttempts = maxAttempts
+            self.requestChecksumCalculation = try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation)
+            self.responseChecksumValidation = try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation)
+            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
+            self.region = region
+            self.signingRegion = signingRegion
+            self.endpointResolver = try endpointResolver ?? DefaultEndpointResolver()
+            self.telemetryProvider = telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider
+            self.retryStrategyOptions = try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts)
+            self.clientLogMode = clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode()
+            self.endpoint = endpoint
+            self.idempotencyTokenGenerator = idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator()
+            self.httpClientEngine = httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration)
+            self.httpClientConfiguration = httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration()
+            self.authSchemes = authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()]
+            self.authSchemePreference = authSchemePreference ?? nil
+            self.authSchemeResolver = authSchemeResolver ?? DefaultDirectoryServiceAuthSchemeResolver()
+            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: ""))
+            self._interceptorProviders = (interceptorProviders ?? []).map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            self._httpInterceptorProviders = (httpInterceptorProviders ?? []).map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            self.logger = (telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider).loggerProvider.getLogger(name: DirectoryClient.clientName)
         }
 
-        public convenience init(
+        public init(
             useFIPS: Swift.Bool? = nil,
             useDualStack: Swift.Bool? = nil,
             appID: Swift.String? = nil,
@@ -256,36 +239,266 @@ extension DirectoryClient {
             interceptorProviders: [ClientRuntime.InterceptorProvider]? = nil,
             httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]? = nil
         ) async throws {
-            self.init(
-                useFIPS,
-                useDualStack,
-                try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
-                awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
-                try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
-                maxAttempts,
-                try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation),
-                try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation),
-                ignoreConfiguredEndpointURLs,
-                try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region),
-                try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region),
-                try endpointResolver ?? DefaultEndpointResolver(),
-                telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider,
-                try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts),
-                clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode(),
-                endpoint,
-                idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
-                httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration),
-                httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration(),
-                authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()],
-                authSchemePreference ?? nil,
-                authSchemeResolver ?? DefaultDirectoryServiceAuthSchemeResolver(),
-                bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
-                interceptorProviders ?? [],
-                httpInterceptorProviders ?? []
+            self.useFIPS = useFIPS
+            self.useDualStack = useDualStack
+            self.appID = try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID()
+            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain()
+            self.awsRetryMode = try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode()
+            self.maxAttempts = maxAttempts
+            self.requestChecksumCalculation = try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation)
+            self.responseChecksumValidation = try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation)
+            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
+            self.region = try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region)
+            self.signingRegion = try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region)
+            self.endpointResolver = try endpointResolver ?? DefaultEndpointResolver()
+            self.telemetryProvider = telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider
+            self.retryStrategyOptions = try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts)
+            self.clientLogMode = clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode()
+            self.endpoint = endpoint
+            self.idempotencyTokenGenerator = idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator()
+            self.httpClientEngine = httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration)
+            self.httpClientConfiguration = httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration()
+            self.authSchemes = authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()]
+            self.authSchemePreference = authSchemePreference ?? nil
+            self.authSchemeResolver = authSchemeResolver ?? DefaultDirectoryServiceAuthSchemeResolver()
+            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: ""))
+            self._interceptorProviders = (interceptorProviders ?? []).map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            self._httpInterceptorProviders = (httpInterceptorProviders ?? []).map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            self.logger = (telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider).loggerProvider.getLogger(name: DirectoryClient.clientName)
+        }
+
+        public init() async throws {
+            try await self.init(
+                useFIPS: nil,
+                useDualStack: nil,
+                appID: nil,
+                awsCredentialIdentityResolver: nil,
+                awsRetryMode: nil,
+                maxAttempts: nil,
+                requestChecksumCalculation: nil,
+                responseChecksumValidation: nil,
+                ignoreConfiguredEndpointURLs: nil,
+                region: nil,
+                signingRegion: nil,
+                endpointResolver: nil,
+                telemetryProvider: nil,
+                retryStrategyOptions: nil,
+                clientLogMode: nil,
+                endpoint: nil,
+                idempotencyTokenGenerator: nil,
+                httpClientEngine: nil,
+                httpClientConfiguration: nil,
+                authSchemes: nil,
+                authSchemePreference: nil,
+                authSchemeResolver: nil,
+                bearerTokenIdentityResolver: nil,
+                interceptorProviders: nil,
+                httpInterceptorProviders: nil
             )
         }
 
-        public convenience required init() async throws {
+        public init(region: Swift.String) throws {
+            try self.init(
+                useFIPS: nil,
+                useDualStack: nil,
+                appID: try AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
+                awsCredentialIdentityResolver: AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
+                awsRetryMode: try AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
+                maxAttempts: nil,
+                requestChecksumCalculation: try AWSClientConfigDefaultsProvider.requestChecksumCalculation(),
+                responseChecksumValidation: try AWSClientConfigDefaultsProvider.responseChecksumValidation(),
+                ignoreConfiguredEndpointURLs: nil,
+                region: region,
+                signingRegion: region,
+                endpointResolver: try DefaultEndpointResolver(),
+                telemetryProvider: ClientRuntime.DefaultTelemetry.provider,
+                retryStrategyOptions: try AWSClientConfigDefaultsProvider.retryStrategyOptions(),
+                clientLogMode: AWSClientConfigDefaultsProvider.clientLogMode(),
+                endpoint: nil,
+                idempotencyTokenGenerator: AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
+                httpClientEngine: AWSClientConfigDefaultsProvider.httpClientEngine(),
+                httpClientConfiguration: AWSClientConfigDefaultsProvider.httpClientConfiguration(),
+                authSchemes: [AWSSDKHTTPAuth.SigV4AuthScheme()],
+                authSchemePreference: nil,
+                authSchemeResolver: DefaultDirectoryServiceAuthSchemeResolver(),
+                bearerTokenIdentityResolver: SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
+                interceptorProviders: [],
+                httpInterceptorProviders: []
+            )
+        }
+
+        public var partitionID: String? {
+            return "\(DirectoryClient.clientName) - \(region ?? "")"
+        }
+
+        public mutating func addInterceptorProvider(_ provider: ClientRuntime.InterceptorProvider) {
+            self._interceptorProviders.append(ClientRuntime.SendableInterceptorProviderBox(provider))
+        }
+
+        public mutating func addInterceptorProvider(_ provider: ClientRuntime.HttpInterceptorProvider) {
+            self._httpInterceptorProviders.append(ClientRuntime.SendableHttpInterceptorProviderBox(provider))
+        }
+
+    }
+
+    @available(*, deprecated, message: "Use DirectoryClientConfig instead. This class will be removed in a future version.")
+    public final class DirectoryClientConfiguration: AWSClientRuntime.AWSDefaultClientConfiguration & AWSClientRuntime.AWSRegionClientConfiguration & ClientRuntime.DefaultClientConfiguration & ClientRuntime.DefaultHttpClientConfiguration {
+        public var useFIPS: Swift.Bool?
+        public var useDualStack: Swift.Bool?
+        public var appID: Swift.String?
+        public var awsCredentialIdentityResolver: any SmithyIdentity.AWSCredentialIdentityResolver
+        public var awsRetryMode: AWSClientRuntime.AWSRetryMode
+        public var maxAttempts: Swift.Int?
+        public var requestChecksumCalculation: AWSSDKChecksums.AWSChecksumCalculationMode
+        public var responseChecksumValidation: AWSSDKChecksums.AWSChecksumCalculationMode
+        public var ignoreConfiguredEndpointURLs: Swift.Bool?
+        public var region: Swift.String?
+        public var signingRegion: Swift.String?
+        public var endpointResolver: EndpointResolver
+        public var telemetryProvider: ClientRuntime.TelemetryProvider
+        public var retryStrategyOptions: SmithyRetriesAPI.RetryStrategyOptions
+        public var clientLogMode: ClientRuntime.ClientLogMode
+        public var endpoint: Swift.String?
+        public var idempotencyTokenGenerator: ClientRuntime.IdempotencyTokenGenerator
+        public var httpClientEngine: SmithyHTTPAPI.HTTPClient
+        public var httpClientConfiguration: ClientRuntime.HttpClientConfiguration
+        public var authSchemes: SmithyHTTPAuthAPI.AuthSchemes?
+        public var authSchemePreference: [String]?
+        public var authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver
+        public var bearerTokenIdentityResolver: any SmithyIdentity.BearerTokenIdentityResolver
+        // Interceptor providers with Sendable-safe internal storage
+        private var _interceptorProviders: [ClientRuntime.SendableInterceptorProviderBox] = []
+        public var interceptorProviders: [ClientRuntime.InterceptorProvider] {
+            get {
+                return _interceptorProviders
+            }
+            set {
+                _interceptorProviders = newValue.map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            }
+        }
+
+        private var _httpInterceptorProviders: [ClientRuntime.SendableHttpInterceptorProviderBox] = []
+        public var httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider] {
+            get {
+                return _httpInterceptorProviders
+            }
+            set {
+                _httpInterceptorProviders = newValue.map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            }
+        }
+        public var logger: Smithy.LogAgent
+
+        public init(
+            useFIPS: Swift.Bool? = nil,
+            useDualStack: Swift.Bool? = nil,
+            appID: Swift.String? = nil,
+            awsCredentialIdentityResolver: (any SmithyIdentity.AWSCredentialIdentityResolver)? = nil,
+            awsRetryMode: AWSClientRuntime.AWSRetryMode? = nil,
+            maxAttempts: Swift.Int? = nil,
+            requestChecksumCalculation: AWSSDKChecksums.AWSChecksumCalculationMode? = nil,
+            responseChecksumValidation: AWSSDKChecksums.AWSChecksumCalculationMode? = nil,
+            ignoreConfiguredEndpointURLs: Swift.Bool? = nil,
+            region: Swift.String? = nil,
+            signingRegion: Swift.String? = nil,
+            endpointResolver: EndpointResolver? = nil,
+            telemetryProvider: ClientRuntime.TelemetryProvider? = nil,
+            retryStrategyOptions: SmithyRetriesAPI.RetryStrategyOptions? = nil,
+            clientLogMode: ClientRuntime.ClientLogMode? = nil,
+            endpoint: Swift.String? = nil,
+            idempotencyTokenGenerator: ClientRuntime.IdempotencyTokenGenerator? = nil,
+            httpClientEngine: SmithyHTTPAPI.HTTPClient? = nil,
+            httpClientConfiguration: ClientRuntime.HttpClientConfiguration? = nil,
+            authSchemes: SmithyHTTPAuthAPI.AuthSchemes? = nil,
+            authSchemePreference: [String]? = nil,
+            authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver? = nil,
+            bearerTokenIdentityResolver: (any SmithyIdentity.BearerTokenIdentityResolver)? = nil,
+            interceptorProviders: [ClientRuntime.InterceptorProvider]? = nil,
+            httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]? = nil
+        ) throws {
+            self.useFIPS = useFIPS
+            self.useDualStack = useDualStack
+            self.appID = try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID()
+            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain()
+            self.awsRetryMode = try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode()
+            self.maxAttempts = maxAttempts
+            self.requestChecksumCalculation = try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation)
+            self.responseChecksumValidation = try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation)
+            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
+            self.region = region
+            self.signingRegion = signingRegion
+            self.endpointResolver = try endpointResolver ?? DefaultEndpointResolver()
+            self.telemetryProvider = telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider
+            self.retryStrategyOptions = try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts)
+            self.clientLogMode = clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode()
+            self.endpoint = endpoint
+            self.idempotencyTokenGenerator = idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator()
+            self.httpClientEngine = httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration)
+            self.httpClientConfiguration = httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration()
+            self.authSchemes = authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()]
+            self.authSchemePreference = authSchemePreference ?? nil
+            self.authSchemeResolver = authSchemeResolver ?? DefaultDirectoryServiceAuthSchemeResolver()
+            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: ""))
+            self._interceptorProviders = (interceptorProviders ?? []).map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            self._httpInterceptorProviders = (httpInterceptorProviders ?? []).map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            self.logger = (telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider).loggerProvider.getLogger(name: DirectoryClient.clientName)
+        }
+
+        public init(
+            useFIPS: Swift.Bool? = nil,
+            useDualStack: Swift.Bool? = nil,
+            appID: Swift.String? = nil,
+            awsCredentialIdentityResolver: (any SmithyIdentity.AWSCredentialIdentityResolver)? = nil,
+            awsRetryMode: AWSClientRuntime.AWSRetryMode? = nil,
+            maxAttempts: Swift.Int? = nil,
+            requestChecksumCalculation: AWSSDKChecksums.AWSChecksumCalculationMode? = nil,
+            responseChecksumValidation: AWSSDKChecksums.AWSChecksumCalculationMode? = nil,
+            ignoreConfiguredEndpointURLs: Swift.Bool? = nil,
+            region: Swift.String? = nil,
+            signingRegion: Swift.String? = nil,
+            endpointResolver: EndpointResolver? = nil,
+            telemetryProvider: ClientRuntime.TelemetryProvider? = nil,
+            retryStrategyOptions: SmithyRetriesAPI.RetryStrategyOptions? = nil,
+            clientLogMode: ClientRuntime.ClientLogMode? = nil,
+            endpoint: Swift.String? = nil,
+            idempotencyTokenGenerator: ClientRuntime.IdempotencyTokenGenerator? = nil,
+            httpClientEngine: SmithyHTTPAPI.HTTPClient? = nil,
+            httpClientConfiguration: ClientRuntime.HttpClientConfiguration? = nil,
+            authSchemes: SmithyHTTPAuthAPI.AuthSchemes? = nil,
+            authSchemePreference: [String]? = nil,
+            authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver? = nil,
+            bearerTokenIdentityResolver: (any SmithyIdentity.BearerTokenIdentityResolver)? = nil,
+            interceptorProviders: [ClientRuntime.InterceptorProvider]? = nil,
+            httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]? = nil
+        ) async throws {
+            self.useFIPS = useFIPS
+            self.useDualStack = useDualStack
+            self.appID = try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID()
+            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain()
+            self.awsRetryMode = try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode()
+            self.maxAttempts = maxAttempts
+            self.requestChecksumCalculation = try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation)
+            self.responseChecksumValidation = try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation)
+            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
+            self.region = try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region)
+            self.signingRegion = try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region)
+            self.endpointResolver = try endpointResolver ?? DefaultEndpointResolver()
+            self.telemetryProvider = telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider
+            self.retryStrategyOptions = try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts)
+            self.clientLogMode = clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode()
+            self.endpoint = endpoint
+            self.idempotencyTokenGenerator = idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator()
+            self.httpClientEngine = httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration)
+            self.httpClientConfiguration = httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration()
+            self.authSchemes = authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()]
+            self.authSchemePreference = authSchemePreference ?? nil
+            self.authSchemeResolver = authSchemeResolver ?? DefaultDirectoryServiceAuthSchemeResolver()
+            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: ""))
+            self._interceptorProviders = (interceptorProviders ?? []).map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            self._httpInterceptorProviders = (httpInterceptorProviders ?? []).map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            self.logger = (telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider).loggerProvider.getLogger(name: DirectoryClient.clientName)
+        }
+
+        public convenience init() async throws {
             try await self.init(
                 useFIPS: nil,
                 useDualStack: nil,
@@ -316,32 +529,32 @@ extension DirectoryClient {
         }
 
         public convenience init(region: Swift.String) throws {
-            self.init(
-                nil,
-                nil,
-                try AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
-                AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
-                try AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
-                nil,
-                try AWSClientConfigDefaultsProvider.requestChecksumCalculation(),
-                try AWSClientConfigDefaultsProvider.responseChecksumValidation(),
-                nil,
-                region,
-                region,
-                try DefaultEndpointResolver(),
-                ClientRuntime.DefaultTelemetry.provider,
-                try AWSClientConfigDefaultsProvider.retryStrategyOptions(),
-                AWSClientConfigDefaultsProvider.clientLogMode(),
-                nil,
-                AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
-                AWSClientConfigDefaultsProvider.httpClientEngine(),
-                AWSClientConfigDefaultsProvider.httpClientConfiguration(),
-                [AWSSDKHTTPAuth.SigV4AuthScheme()],
-                nil,
-                DefaultDirectoryServiceAuthSchemeResolver(),
-                SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
-                [],
-                []
+            try self.init(
+                useFIPS: nil,
+                useDualStack: nil,
+                appID: try AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
+                awsCredentialIdentityResolver: AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
+                awsRetryMode: try AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
+                maxAttempts: nil,
+                requestChecksumCalculation: try AWSClientConfigDefaultsProvider.requestChecksumCalculation(),
+                responseChecksumValidation: try AWSClientConfigDefaultsProvider.responseChecksumValidation(),
+                ignoreConfiguredEndpointURLs: nil,
+                region: region,
+                signingRegion: region,
+                endpointResolver: try DefaultEndpointResolver(),
+                telemetryProvider: ClientRuntime.DefaultTelemetry.provider,
+                retryStrategyOptions: try AWSClientConfigDefaultsProvider.retryStrategyOptions(),
+                clientLogMode: AWSClientConfigDefaultsProvider.clientLogMode(),
+                endpoint: nil,
+                idempotencyTokenGenerator: AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
+                httpClientEngine: AWSClientConfigDefaultsProvider.httpClientEngine(),
+                httpClientConfiguration: AWSClientConfigDefaultsProvider.httpClientConfiguration(),
+                authSchemes: [AWSSDKHTTPAuth.SigV4AuthScheme()],
+                authSchemePreference: nil,
+                authSchemeResolver: DefaultDirectoryServiceAuthSchemeResolver(),
+                bearerTokenIdentityResolver: SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
+                interceptorProviders: [],
+                httpInterceptorProviders: []
             )
         }
 
@@ -349,12 +562,42 @@ extension DirectoryClient {
             return "\(DirectoryClient.clientName) - \(region ?? "")"
         }
 
+        public func toSendable() throws -> DirectoryClientConfig {
+            return try DirectoryClientConfig(
+                useFIPS: self.useFIPS,
+                useDualStack: self.useDualStack,
+                appID: self.appID,
+                awsCredentialIdentityResolver: self.awsCredentialIdentityResolver,
+                awsRetryMode: self.awsRetryMode,
+                maxAttempts: self.maxAttempts,
+                requestChecksumCalculation: self.requestChecksumCalculation,
+                responseChecksumValidation: self.responseChecksumValidation,
+                ignoreConfiguredEndpointURLs: self.ignoreConfiguredEndpointURLs,
+                region: self.region,
+                signingRegion: self.signingRegion,
+                endpointResolver: self.endpointResolver,
+                telemetryProvider: self.telemetryProvider,
+                retryStrategyOptions: self.retryStrategyOptions,
+                clientLogMode: self.clientLogMode,
+                endpoint: self.endpoint,
+                idempotencyTokenGenerator: self.idempotencyTokenGenerator,
+                httpClientEngine: self.httpClientEngine,
+                httpClientConfiguration: self.httpClientConfiguration,
+                authSchemes: self.authSchemes,
+                authSchemePreference: self.authSchemePreference,
+                authSchemeResolver: self.authSchemeResolver,
+                bearerTokenIdentityResolver: self.bearerTokenIdentityResolver,
+                interceptorProviders: self.interceptorProviders,
+                httpInterceptorProviders: self.httpInterceptorProviders
+            )
+        }
+
         public func addInterceptorProvider(_ provider: ClientRuntime.InterceptorProvider) {
-            self.interceptorProviders.append(provider)
+            self._interceptorProviders.append(ClientRuntime.SendableInterceptorProviderBox(provider))
         }
 
         public func addInterceptorProvider(_ provider: ClientRuntime.HttpInterceptorProvider) {
-            self.httpInterceptorProviders.append(provider)
+            self._httpInterceptorProviders.append(ClientRuntime.SendableHttpInterceptorProviderBox(provider))
         }
 
     }
@@ -420,7 +663,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<AcceptSharedDirectoryOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<AcceptSharedDirectoryInput, AcceptSharedDirectoryOutput>(xAmzTarget: "DirectoryService_20150416.AcceptSharedDirectory"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<AcceptSharedDirectoryInput, AcceptSharedDirectoryOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.AcceptSharedDirectory"]))
         builder.serialize(ClientRuntime.BodyMiddleware<AcceptSharedDirectoryInput, AcceptSharedDirectoryOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: AcceptSharedDirectoryInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<AcceptSharedDirectoryInput, AcceptSharedDirectoryOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<AcceptSharedDirectoryOutput>())
@@ -495,7 +738,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<AddIpRoutesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<AddIpRoutesInput, AddIpRoutesOutput>(xAmzTarget: "DirectoryService_20150416.AddIpRoutes"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<AddIpRoutesInput, AddIpRoutesOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.AddIpRoutes"]))
         builder.serialize(ClientRuntime.BodyMiddleware<AddIpRoutesInput, AddIpRoutesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: AddIpRoutesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<AddIpRoutesInput, AddIpRoutesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<AddIpRoutesOutput>())
@@ -573,7 +816,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<AddRegionOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<AddRegionInput, AddRegionOutput>(xAmzTarget: "DirectoryService_20150416.AddRegion"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<AddRegionInput, AddRegionOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.AddRegion"]))
         builder.serialize(ClientRuntime.BodyMiddleware<AddRegionInput, AddRegionOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: AddRegionInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<AddRegionInput, AddRegionOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<AddRegionOutput>())
@@ -646,7 +889,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<AddTagsToResourceOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<AddTagsToResourceInput, AddTagsToResourceOutput>(xAmzTarget: "DirectoryService_20150416.AddTagsToResource"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<AddTagsToResourceInput, AddTagsToResourceOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.AddTagsToResource"]))
         builder.serialize(ClientRuntime.BodyMiddleware<AddTagsToResourceInput, AddTagsToResourceOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: AddTagsToResourceInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<AddTagsToResourceInput, AddTagsToResourceOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<AddTagsToResourceOutput>())
@@ -717,7 +960,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CancelSchemaExtensionOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CancelSchemaExtensionInput, CancelSchemaExtensionOutput>(xAmzTarget: "DirectoryService_20150416.CancelSchemaExtension"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CancelSchemaExtensionInput, CancelSchemaExtensionOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.CancelSchemaExtension"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CancelSchemaExtensionInput, CancelSchemaExtensionOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CancelSchemaExtensionInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CancelSchemaExtensionInput, CancelSchemaExtensionOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CancelSchemaExtensionOutput>())
@@ -789,7 +1032,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ConnectDirectoryOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ConnectDirectoryInput, ConnectDirectoryOutput>(xAmzTarget: "DirectoryService_20150416.ConnectDirectory"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ConnectDirectoryInput, ConnectDirectoryOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.ConnectDirectory"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ConnectDirectoryInput, ConnectDirectoryOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ConnectDirectoryInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ConnectDirectoryInput, ConnectDirectoryOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ConnectDirectoryOutput>())
@@ -862,7 +1105,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateAliasOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateAliasInput, CreateAliasOutput>(xAmzTarget: "DirectoryService_20150416.CreateAlias"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateAliasInput, CreateAliasOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.CreateAlias"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateAliasInput, CreateAliasOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateAliasInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateAliasInput, CreateAliasOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateAliasOutput>())
@@ -938,7 +1181,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateComputerOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateComputerInput, CreateComputerOutput>(xAmzTarget: "DirectoryService_20150416.CreateComputer"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateComputerInput, CreateComputerOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.CreateComputer"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateComputerInput, CreateComputerOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateComputerInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateComputerInput, CreateComputerOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateComputerOutput>())
@@ -1013,7 +1256,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateConditionalForwarderOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateConditionalForwarderInput, CreateConditionalForwarderOutput>(xAmzTarget: "DirectoryService_20150416.CreateConditionalForwarder"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateConditionalForwarderInput, CreateConditionalForwarderOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.CreateConditionalForwarder"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateConditionalForwarderInput, CreateConditionalForwarderOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateConditionalForwarderInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateConditionalForwarderInput, CreateConditionalForwarderOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateConditionalForwarderOutput>())
@@ -1085,7 +1328,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateDirectoryOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateDirectoryInput, CreateDirectoryOutput>(xAmzTarget: "DirectoryService_20150416.CreateDirectory"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateDirectoryInput, CreateDirectoryOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.CreateDirectory"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateDirectoryInput, CreateDirectoryOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateDirectoryInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateDirectoryInput, CreateDirectoryOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateDirectoryOutput>())
@@ -1160,7 +1403,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateHybridADOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateHybridADInput, CreateHybridADOutput>(xAmzTarget: "DirectoryService_20150416.CreateHybridAD"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateHybridADInput, CreateHybridADOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.CreateHybridAD"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateHybridADInput, CreateHybridADOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateHybridADInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateHybridADInput, CreateHybridADOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateHybridADOutput>())
@@ -1234,7 +1477,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateLogSubscriptionOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateLogSubscriptionInput, CreateLogSubscriptionOutput>(xAmzTarget: "DirectoryService_20150416.CreateLogSubscription"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateLogSubscriptionInput, CreateLogSubscriptionOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.CreateLogSubscription"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateLogSubscriptionInput, CreateLogSubscriptionOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateLogSubscriptionInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateLogSubscriptionInput, CreateLogSubscriptionOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateLogSubscriptionOutput>())
@@ -1307,7 +1550,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateMicrosoftADOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateMicrosoftADInput, CreateMicrosoftADOutput>(xAmzTarget: "DirectoryService_20150416.CreateMicrosoftAD"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateMicrosoftADInput, CreateMicrosoftADOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.CreateMicrosoftAD"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateMicrosoftADInput, CreateMicrosoftADOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateMicrosoftADInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateMicrosoftADInput, CreateMicrosoftADOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateMicrosoftADOutput>())
@@ -1380,7 +1623,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateSnapshotOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateSnapshotInput, CreateSnapshotOutput>(xAmzTarget: "DirectoryService_20150416.CreateSnapshot"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateSnapshotInput, CreateSnapshotOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.CreateSnapshot"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateSnapshotInput, CreateSnapshotOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateSnapshotInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateSnapshotInput, CreateSnapshotOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateSnapshotOutput>())
@@ -1454,7 +1697,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateTrustOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateTrustInput, CreateTrustOutput>(xAmzTarget: "DirectoryService_20150416.CreateTrust"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateTrustInput, CreateTrustOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.CreateTrust"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateTrustInput, CreateTrustOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateTrustInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateTrustInput, CreateTrustOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateTrustOutput>())
@@ -1527,7 +1770,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteADAssessmentOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteADAssessmentInput, DeleteADAssessmentOutput>(xAmzTarget: "DirectoryService_20150416.DeleteADAssessment"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteADAssessmentInput, DeleteADAssessmentOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.DeleteADAssessment"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteADAssessmentInput, DeleteADAssessmentOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteADAssessmentInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteADAssessmentInput, DeleteADAssessmentOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteADAssessmentOutput>())
@@ -1601,7 +1844,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteConditionalForwarderOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteConditionalForwarderInput, DeleteConditionalForwarderOutput>(xAmzTarget: "DirectoryService_20150416.DeleteConditionalForwarder"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteConditionalForwarderInput, DeleteConditionalForwarderOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.DeleteConditionalForwarder"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteConditionalForwarderInput, DeleteConditionalForwarderOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteConditionalForwarderInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteConditionalForwarderInput, DeleteConditionalForwarderOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteConditionalForwarderOutput>())
@@ -1672,7 +1915,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteDirectoryOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteDirectoryInput, DeleteDirectoryOutput>(xAmzTarget: "DirectoryService_20150416.DeleteDirectory"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteDirectoryInput, DeleteDirectoryOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.DeleteDirectory"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteDirectoryInput, DeleteDirectoryOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteDirectoryInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteDirectoryInput, DeleteDirectoryOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteDirectoryOutput>())
@@ -1744,7 +1987,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteLogSubscriptionOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteLogSubscriptionInput, DeleteLogSubscriptionOutput>(xAmzTarget: "DirectoryService_20150416.DeleteLogSubscription"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteLogSubscriptionInput, DeleteLogSubscriptionOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.DeleteLogSubscription"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteLogSubscriptionInput, DeleteLogSubscriptionOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteLogSubscriptionInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteLogSubscriptionInput, DeleteLogSubscriptionOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteLogSubscriptionOutput>())
@@ -1816,7 +2059,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteSnapshotOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteSnapshotInput, DeleteSnapshotOutput>(xAmzTarget: "DirectoryService_20150416.DeleteSnapshot"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteSnapshotInput, DeleteSnapshotOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.DeleteSnapshot"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteSnapshotInput, DeleteSnapshotOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteSnapshotInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteSnapshotInput, DeleteSnapshotOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteSnapshotOutput>())
@@ -1889,7 +2132,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteTrustOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteTrustInput, DeleteTrustOutput>(xAmzTarget: "DirectoryService_20150416.DeleteTrust"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteTrustInput, DeleteTrustOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.DeleteTrust"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteTrustInput, DeleteTrustOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteTrustInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteTrustInput, DeleteTrustOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteTrustOutput>())
@@ -1965,7 +2208,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeregisterCertificateOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeregisterCertificateInput, DeregisterCertificateOutput>(xAmzTarget: "DirectoryService_20150416.DeregisterCertificate"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeregisterCertificateInput, DeregisterCertificateOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.DeregisterCertificate"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeregisterCertificateInput, DeregisterCertificateOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeregisterCertificateInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeregisterCertificateInput, DeregisterCertificateOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeregisterCertificateOutput>())
@@ -2037,7 +2280,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeregisterEventTopicOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeregisterEventTopicInput, DeregisterEventTopicOutput>(xAmzTarget: "DirectoryService_20150416.DeregisterEventTopic"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeregisterEventTopicInput, DeregisterEventTopicOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.DeregisterEventTopic"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeregisterEventTopicInput, DeregisterEventTopicOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeregisterEventTopicInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeregisterEventTopicInput, DeregisterEventTopicOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeregisterEventTopicOutput>())
@@ -2110,7 +2353,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeADAssessmentOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeADAssessmentInput, DescribeADAssessmentOutput>(xAmzTarget: "DirectoryService_20150416.DescribeADAssessment"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeADAssessmentInput, DescribeADAssessmentOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.DescribeADAssessment"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeADAssessmentInput, DescribeADAssessmentOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeADAssessmentInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeADAssessmentInput, DescribeADAssessmentOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeADAssessmentOutput>())
@@ -2182,7 +2425,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeCAEnrollmentPolicyOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeCAEnrollmentPolicyInput, DescribeCAEnrollmentPolicyOutput>(xAmzTarget: "DirectoryService_20150416.DescribeCAEnrollmentPolicy"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeCAEnrollmentPolicyInput, DescribeCAEnrollmentPolicyOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.DescribeCAEnrollmentPolicy"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeCAEnrollmentPolicyInput, DescribeCAEnrollmentPolicyOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeCAEnrollmentPolicyInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeCAEnrollmentPolicyInput, DescribeCAEnrollmentPolicyOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeCAEnrollmentPolicyOutput>())
@@ -2256,7 +2499,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeCertificateOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeCertificateInput, DescribeCertificateOutput>(xAmzTarget: "DirectoryService_20150416.DescribeCertificate"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeCertificateInput, DescribeCertificateOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.DescribeCertificate"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeCertificateInput, DescribeCertificateOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeCertificateInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeCertificateInput, DescribeCertificateOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeCertificateOutput>())
@@ -2330,7 +2573,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeClientAuthenticationSettingsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeClientAuthenticationSettingsInput, DescribeClientAuthenticationSettingsOutput>(xAmzTarget: "DirectoryService_20150416.DescribeClientAuthenticationSettings"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeClientAuthenticationSettingsInput, DescribeClientAuthenticationSettingsOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.DescribeClientAuthenticationSettings"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeClientAuthenticationSettingsInput, DescribeClientAuthenticationSettingsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeClientAuthenticationSettingsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeClientAuthenticationSettingsInput, DescribeClientAuthenticationSettingsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeClientAuthenticationSettingsOutput>())
@@ -2404,7 +2647,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeConditionalForwardersOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeConditionalForwardersInput, DescribeConditionalForwardersOutput>(xAmzTarget: "DirectoryService_20150416.DescribeConditionalForwarders"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeConditionalForwardersInput, DescribeConditionalForwardersOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.DescribeConditionalForwarders"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeConditionalForwardersInput, DescribeConditionalForwardersOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeConditionalForwardersInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeConditionalForwardersInput, DescribeConditionalForwardersOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeConditionalForwardersOutput>())
@@ -2477,7 +2720,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeDirectoriesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeDirectoriesInput, DescribeDirectoriesOutput>(xAmzTarget: "DirectoryService_20150416.DescribeDirectories"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeDirectoriesInput, DescribeDirectoriesOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.DescribeDirectories"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeDirectoriesInput, DescribeDirectoriesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeDirectoriesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeDirectoriesInput, DescribeDirectoriesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeDirectoriesOutput>())
@@ -2550,7 +2793,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeDirectoryDataAccessOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeDirectoryDataAccessInput, DescribeDirectoryDataAccessOutput>(xAmzTarget: "DirectoryService_20150416.DescribeDirectoryDataAccess"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeDirectoryDataAccessInput, DescribeDirectoryDataAccessOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.DescribeDirectoryDataAccess"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeDirectoryDataAccessInput, DescribeDirectoryDataAccessOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeDirectoryDataAccessInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeDirectoryDataAccessInput, DescribeDirectoryDataAccessOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeDirectoryDataAccessOutput>())
@@ -2624,7 +2867,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeDomainControllersOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeDomainControllersInput, DescribeDomainControllersOutput>(xAmzTarget: "DirectoryService_20150416.DescribeDomainControllers"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeDomainControllersInput, DescribeDomainControllersOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.DescribeDomainControllers"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeDomainControllersInput, DescribeDomainControllersOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeDomainControllersInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeDomainControllersInput, DescribeDomainControllersOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeDomainControllersOutput>())
@@ -2696,7 +2939,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeEventTopicsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeEventTopicsInput, DescribeEventTopicsOutput>(xAmzTarget: "DirectoryService_20150416.DescribeEventTopics"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeEventTopicsInput, DescribeEventTopicsOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.DescribeEventTopics"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeEventTopicsInput, DescribeEventTopicsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeEventTopicsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeEventTopicsInput, DescribeEventTopicsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeEventTopicsOutput>())
@@ -2770,7 +3013,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeHybridADUpdateOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeHybridADUpdateInput, DescribeHybridADUpdateOutput>(xAmzTarget: "DirectoryService_20150416.DescribeHybridADUpdate"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeHybridADUpdateInput, DescribeHybridADUpdateOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.DescribeHybridADUpdate"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeHybridADUpdateInput, DescribeHybridADUpdateOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeHybridADUpdateInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeHybridADUpdateInput, DescribeHybridADUpdateOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeHybridADUpdateOutput>())
@@ -2844,7 +3087,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeLDAPSSettingsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeLDAPSSettingsInput, DescribeLDAPSSettingsOutput>(xAmzTarget: "DirectoryService_20150416.DescribeLDAPSSettings"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeLDAPSSettingsInput, DescribeLDAPSSettingsOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.DescribeLDAPSSettings"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeLDAPSSettingsInput, DescribeLDAPSSettingsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeLDAPSSettingsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeLDAPSSettingsInput, DescribeLDAPSSettingsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeLDAPSSettingsOutput>())
@@ -2919,7 +3162,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeRegionsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeRegionsInput, DescribeRegionsOutput>(xAmzTarget: "DirectoryService_20150416.DescribeRegions"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeRegionsInput, DescribeRegionsOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.DescribeRegions"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeRegionsInput, DescribeRegionsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeRegionsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeRegionsInput, DescribeRegionsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeRegionsOutput>())
@@ -2993,7 +3236,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeSettingsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeSettingsInput, DescribeSettingsOutput>(xAmzTarget: "DirectoryService_20150416.DescribeSettings"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeSettingsInput, DescribeSettingsOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.DescribeSettings"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeSettingsInput, DescribeSettingsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeSettingsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeSettingsInput, DescribeSettingsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeSettingsOutput>())
@@ -3067,7 +3310,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeSharedDirectoriesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeSharedDirectoriesInput, DescribeSharedDirectoriesOutput>(xAmzTarget: "DirectoryService_20150416.DescribeSharedDirectories"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeSharedDirectoriesInput, DescribeSharedDirectoriesOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.DescribeSharedDirectories"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeSharedDirectoriesInput, DescribeSharedDirectoriesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeSharedDirectoriesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeSharedDirectoriesInput, DescribeSharedDirectoriesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeSharedDirectoriesOutput>())
@@ -3140,7 +3383,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeSnapshotsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeSnapshotsInput, DescribeSnapshotsOutput>(xAmzTarget: "DirectoryService_20150416.DescribeSnapshots"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeSnapshotsInput, DescribeSnapshotsOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.DescribeSnapshots"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeSnapshotsInput, DescribeSnapshotsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeSnapshotsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeSnapshotsInput, DescribeSnapshotsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeSnapshotsOutput>())
@@ -3214,7 +3457,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeTrustsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeTrustsInput, DescribeTrustsOutput>(xAmzTarget: "DirectoryService_20150416.DescribeTrusts"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeTrustsInput, DescribeTrustsOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.DescribeTrusts"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeTrustsInput, DescribeTrustsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeTrustsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeTrustsInput, DescribeTrustsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeTrustsOutput>())
@@ -3288,7 +3531,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DescribeUpdateDirectoryOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DescribeUpdateDirectoryInput, DescribeUpdateDirectoryOutput>(xAmzTarget: "DirectoryService_20150416.DescribeUpdateDirectory"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DescribeUpdateDirectoryInput, DescribeUpdateDirectoryOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.DescribeUpdateDirectory"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DescribeUpdateDirectoryInput, DescribeUpdateDirectoryOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DescribeUpdateDirectoryInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DescribeUpdateDirectoryInput, DescribeUpdateDirectoryOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DescribeUpdateDirectoryOutput>())
@@ -3364,7 +3607,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DisableCAEnrollmentPolicyOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DisableCAEnrollmentPolicyInput, DisableCAEnrollmentPolicyOutput>(xAmzTarget: "DirectoryService_20150416.DisableCAEnrollmentPolicy"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DisableCAEnrollmentPolicyInput, DisableCAEnrollmentPolicyOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.DisableCAEnrollmentPolicy"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DisableCAEnrollmentPolicyInput, DisableCAEnrollmentPolicyOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DisableCAEnrollmentPolicyInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DisableCAEnrollmentPolicyInput, DisableCAEnrollmentPolicyOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DisableCAEnrollmentPolicyOutput>())
@@ -3438,7 +3681,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DisableClientAuthenticationOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DisableClientAuthenticationInput, DisableClientAuthenticationOutput>(xAmzTarget: "DirectoryService_20150416.DisableClientAuthentication"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DisableClientAuthenticationInput, DisableClientAuthenticationOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.DisableClientAuthentication"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DisableClientAuthenticationInput, DisableClientAuthenticationOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DisableClientAuthenticationInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DisableClientAuthenticationInput, DisableClientAuthenticationOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DisableClientAuthenticationOutput>())
@@ -3513,7 +3756,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DisableDirectoryDataAccessOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DisableDirectoryDataAccessInput, DisableDirectoryDataAccessOutput>(xAmzTarget: "DirectoryService_20150416.DisableDirectoryDataAccess"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DisableDirectoryDataAccessInput, DisableDirectoryDataAccessOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.DisableDirectoryDataAccess"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DisableDirectoryDataAccessInput, DisableDirectoryDataAccessOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DisableDirectoryDataAccessInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DisableDirectoryDataAccessInput, DisableDirectoryDataAccessOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DisableDirectoryDataAccessOutput>())
@@ -3588,7 +3831,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DisableLDAPSOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DisableLDAPSInput, DisableLDAPSOutput>(xAmzTarget: "DirectoryService_20150416.DisableLDAPS"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DisableLDAPSInput, DisableLDAPSOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.DisableLDAPS"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DisableLDAPSInput, DisableLDAPSOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DisableLDAPSInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DisableLDAPSInput, DisableLDAPSOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DisableLDAPSOutput>())
@@ -3659,7 +3902,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DisableRadiusOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DisableRadiusInput, DisableRadiusOutput>(xAmzTarget: "DirectoryService_20150416.DisableRadius"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DisableRadiusInput, DisableRadiusOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.DisableRadius"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DisableRadiusInput, DisableRadiusOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DisableRadiusInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DisableRadiusInput, DisableRadiusOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DisableRadiusOutput>())
@@ -3732,7 +3975,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DisableSsoOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DisableSsoInput, DisableSsoOutput>(xAmzTarget: "DirectoryService_20150416.DisableSso"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DisableSsoInput, DisableSsoOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.DisableSso"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DisableSsoInput, DisableSsoOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DisableSsoInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DisableSsoInput, DisableSsoOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DisableSsoOutput>())
@@ -3809,7 +4052,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<EnableCAEnrollmentPolicyOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<EnableCAEnrollmentPolicyInput, EnableCAEnrollmentPolicyOutput>(xAmzTarget: "DirectoryService_20150416.EnableCAEnrollmentPolicy"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<EnableCAEnrollmentPolicyInput, EnableCAEnrollmentPolicyOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.EnableCAEnrollmentPolicy"]))
         builder.serialize(ClientRuntime.BodyMiddleware<EnableCAEnrollmentPolicyInput, EnableCAEnrollmentPolicyOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: EnableCAEnrollmentPolicyInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<EnableCAEnrollmentPolicyInput, EnableCAEnrollmentPolicyOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<EnableCAEnrollmentPolicyOutput>())
@@ -3884,7 +4127,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<EnableClientAuthenticationOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<EnableClientAuthenticationInput, EnableClientAuthenticationOutput>(xAmzTarget: "DirectoryService_20150416.EnableClientAuthentication"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<EnableClientAuthenticationInput, EnableClientAuthenticationOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.EnableClientAuthentication"]))
         builder.serialize(ClientRuntime.BodyMiddleware<EnableClientAuthenticationInput, EnableClientAuthenticationOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: EnableClientAuthenticationInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<EnableClientAuthenticationInput, EnableClientAuthenticationOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<EnableClientAuthenticationOutput>())
@@ -3959,7 +4202,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<EnableDirectoryDataAccessOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<EnableDirectoryDataAccessInput, EnableDirectoryDataAccessOutput>(xAmzTarget: "DirectoryService_20150416.EnableDirectoryDataAccess"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<EnableDirectoryDataAccessInput, EnableDirectoryDataAccessOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.EnableDirectoryDataAccess"]))
         builder.serialize(ClientRuntime.BodyMiddleware<EnableDirectoryDataAccessInput, EnableDirectoryDataAccessOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: EnableDirectoryDataAccessInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<EnableDirectoryDataAccessInput, EnableDirectoryDataAccessOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<EnableDirectoryDataAccessOutput>())
@@ -4035,7 +4278,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<EnableLDAPSOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<EnableLDAPSInput, EnableLDAPSOutput>(xAmzTarget: "DirectoryService_20150416.EnableLDAPS"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<EnableLDAPSInput, EnableLDAPSOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.EnableLDAPS"]))
         builder.serialize(ClientRuntime.BodyMiddleware<EnableLDAPSInput, EnableLDAPSOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: EnableLDAPSInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<EnableLDAPSInput, EnableLDAPSOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<EnableLDAPSOutput>())
@@ -4108,7 +4351,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<EnableRadiusOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<EnableRadiusInput, EnableRadiusOutput>(xAmzTarget: "DirectoryService_20150416.EnableRadius"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<EnableRadiusInput, EnableRadiusOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.EnableRadius"]))
         builder.serialize(ClientRuntime.BodyMiddleware<EnableRadiusInput, EnableRadiusOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: EnableRadiusInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<EnableRadiusInput, EnableRadiusOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<EnableRadiusOutput>())
@@ -4181,7 +4424,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<EnableSsoOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<EnableSsoInput, EnableSsoOutput>(xAmzTarget: "DirectoryService_20150416.EnableSso"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<EnableSsoInput, EnableSsoOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.EnableSso"]))
         builder.serialize(ClientRuntime.BodyMiddleware<EnableSsoInput, EnableSsoOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: EnableSsoInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<EnableSsoInput, EnableSsoOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<EnableSsoOutput>())
@@ -4252,7 +4495,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetDirectoryLimitsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetDirectoryLimitsInput, GetDirectoryLimitsOutput>(xAmzTarget: "DirectoryService_20150416.GetDirectoryLimits"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetDirectoryLimitsInput, GetDirectoryLimitsOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.GetDirectoryLimits"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetDirectoryLimitsInput, GetDirectoryLimitsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetDirectoryLimitsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetDirectoryLimitsInput, GetDirectoryLimitsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetDirectoryLimitsOutput>())
@@ -4323,7 +4566,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetSnapshotLimitsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetSnapshotLimitsInput, GetSnapshotLimitsOutput>(xAmzTarget: "DirectoryService_20150416.GetSnapshotLimits"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetSnapshotLimitsInput, GetSnapshotLimitsOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.GetSnapshotLimits"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetSnapshotLimitsInput, GetSnapshotLimitsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetSnapshotLimitsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetSnapshotLimitsInput, GetSnapshotLimitsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetSnapshotLimitsOutput>())
@@ -4396,7 +4639,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListADAssessmentsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListADAssessmentsInput, ListADAssessmentsOutput>(xAmzTarget: "DirectoryService_20150416.ListADAssessments"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListADAssessmentsInput, ListADAssessmentsOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.ListADAssessments"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListADAssessmentsInput, ListADAssessmentsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListADAssessmentsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListADAssessmentsInput, ListADAssessmentsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListADAssessmentsOutput>())
@@ -4470,7 +4713,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListCertificatesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListCertificatesInput, ListCertificatesOutput>(xAmzTarget: "DirectoryService_20150416.ListCertificates"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListCertificatesInput, ListCertificatesOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.ListCertificates"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListCertificatesInput, ListCertificatesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListCertificatesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListCertificatesInput, ListCertificatesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListCertificatesOutput>())
@@ -4543,7 +4786,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListIpRoutesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListIpRoutesInput, ListIpRoutesOutput>(xAmzTarget: "DirectoryService_20150416.ListIpRoutes"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListIpRoutesInput, ListIpRoutesOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.ListIpRoutes"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListIpRoutesInput, ListIpRoutesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListIpRoutesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListIpRoutesInput, ListIpRoutesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListIpRoutesOutput>())
@@ -4615,7 +4858,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListLogSubscriptionsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListLogSubscriptionsInput, ListLogSubscriptionsOutput>(xAmzTarget: "DirectoryService_20150416.ListLogSubscriptions"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListLogSubscriptionsInput, ListLogSubscriptionsOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.ListLogSubscriptions"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListLogSubscriptionsInput, ListLogSubscriptionsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListLogSubscriptionsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListLogSubscriptionsInput, ListLogSubscriptionsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListLogSubscriptionsOutput>())
@@ -4687,7 +4930,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListSchemaExtensionsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListSchemaExtensionsInput, ListSchemaExtensionsOutput>(xAmzTarget: "DirectoryService_20150416.ListSchemaExtensions"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListSchemaExtensionsInput, ListSchemaExtensionsOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.ListSchemaExtensions"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListSchemaExtensionsInput, ListSchemaExtensionsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListSchemaExtensionsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListSchemaExtensionsInput, ListSchemaExtensionsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListSchemaExtensionsOutput>())
@@ -4760,7 +5003,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListTagsForResourceOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListTagsForResourceInput, ListTagsForResourceOutput>(xAmzTarget: "DirectoryService_20150416.ListTagsForResource"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListTagsForResourceInput, ListTagsForResourceOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.ListTagsForResource"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListTagsForResourceInput, ListTagsForResourceOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListTagsForResourceInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListTagsForResourceInput, ListTagsForResourceOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListTagsForResourceOutput>())
@@ -4837,7 +5080,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<RegisterCertificateOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<RegisterCertificateInput, RegisterCertificateOutput>(xAmzTarget: "DirectoryService_20150416.RegisterCertificate"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<RegisterCertificateInput, RegisterCertificateOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.RegisterCertificate"]))
         builder.serialize(ClientRuntime.BodyMiddleware<RegisterCertificateInput, RegisterCertificateOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: RegisterCertificateInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<RegisterCertificateInput, RegisterCertificateOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<RegisterCertificateOutput>())
@@ -4909,7 +5152,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<RegisterEventTopicOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<RegisterEventTopicInput, RegisterEventTopicOutput>(xAmzTarget: "DirectoryService_20150416.RegisterEventTopic"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<RegisterEventTopicInput, RegisterEventTopicOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.RegisterEventTopic"]))
         builder.serialize(ClientRuntime.BodyMiddleware<RegisterEventTopicInput, RegisterEventTopicOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: RegisterEventTopicInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<RegisterEventTopicInput, RegisterEventTopicOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<RegisterEventTopicOutput>())
@@ -4982,7 +5225,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<RejectSharedDirectoryOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<RejectSharedDirectoryInput, RejectSharedDirectoryOutput>(xAmzTarget: "DirectoryService_20150416.RejectSharedDirectory"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<RejectSharedDirectoryInput, RejectSharedDirectoryOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.RejectSharedDirectory"]))
         builder.serialize(ClientRuntime.BodyMiddleware<RejectSharedDirectoryInput, RejectSharedDirectoryOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: RejectSharedDirectoryInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<RejectSharedDirectoryInput, RejectSharedDirectoryOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<RejectSharedDirectoryOutput>())
@@ -5055,7 +5298,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<RemoveIpRoutesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<RemoveIpRoutesInput, RemoveIpRoutesOutput>(xAmzTarget: "DirectoryService_20150416.RemoveIpRoutes"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<RemoveIpRoutesInput, RemoveIpRoutesOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.RemoveIpRoutes"]))
         builder.serialize(ClientRuntime.BodyMiddleware<RemoveIpRoutesInput, RemoveIpRoutesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: RemoveIpRoutesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<RemoveIpRoutesInput, RemoveIpRoutesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<RemoveIpRoutesOutput>())
@@ -5129,7 +5372,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<RemoveRegionOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<RemoveRegionInput, RemoveRegionOutput>(xAmzTarget: "DirectoryService_20150416.RemoveRegion"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<RemoveRegionInput, RemoveRegionOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.RemoveRegion"]))
         builder.serialize(ClientRuntime.BodyMiddleware<RemoveRegionInput, RemoveRegionOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: RemoveRegionInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<RemoveRegionInput, RemoveRegionOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<RemoveRegionOutput>())
@@ -5201,7 +5444,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<RemoveTagsFromResourceOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<RemoveTagsFromResourceInput, RemoveTagsFromResourceOutput>(xAmzTarget: "DirectoryService_20150416.RemoveTagsFromResource"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<RemoveTagsFromResourceInput, RemoveTagsFromResourceOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.RemoveTagsFromResource"]))
         builder.serialize(ClientRuntime.BodyMiddleware<RemoveTagsFromResourceInput, RemoveTagsFromResourceOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: RemoveTagsFromResourceInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<RemoveTagsFromResourceInput, RemoveTagsFromResourceOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<RemoveTagsFromResourceOutput>())
@@ -5280,7 +5523,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ResetUserPasswordOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ResetUserPasswordInput, ResetUserPasswordOutput>(xAmzTarget: "DirectoryService_20150416.ResetUserPassword"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ResetUserPasswordInput, ResetUserPasswordOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.ResetUserPassword"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ResetUserPasswordInput, ResetUserPasswordOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ResetUserPasswordInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ResetUserPasswordInput, ResetUserPasswordOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ResetUserPasswordOutput>())
@@ -5352,7 +5595,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<RestoreFromSnapshotOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<RestoreFromSnapshotInput, RestoreFromSnapshotOutput>(xAmzTarget: "DirectoryService_20150416.RestoreFromSnapshot"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<RestoreFromSnapshotInput, RestoreFromSnapshotOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.RestoreFromSnapshot"]))
         builder.serialize(ClientRuntime.BodyMiddleware<RestoreFromSnapshotInput, RestoreFromSnapshotOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: RestoreFromSnapshotInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<RestoreFromSnapshotInput, RestoreFromSnapshotOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<RestoreFromSnapshotOutput>())
@@ -5430,7 +5673,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ShareDirectoryOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ShareDirectoryInput, ShareDirectoryOutput>(xAmzTarget: "DirectoryService_20150416.ShareDirectory"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ShareDirectoryInput, ShareDirectoryOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.ShareDirectory"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ShareDirectoryInput, ShareDirectoryOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ShareDirectoryInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ShareDirectoryInput, ShareDirectoryOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ShareDirectoryOutput>())
@@ -5504,7 +5747,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<StartADAssessmentOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<StartADAssessmentInput, StartADAssessmentOutput>(xAmzTarget: "DirectoryService_20150416.StartADAssessment"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<StartADAssessmentInput, StartADAssessmentOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.StartADAssessment"]))
         builder.serialize(ClientRuntime.BodyMiddleware<StartADAssessmentInput, StartADAssessmentOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: StartADAssessmentInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<StartADAssessmentInput, StartADAssessmentOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<StartADAssessmentOutput>())
@@ -5578,7 +5821,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<StartSchemaExtensionOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<StartSchemaExtensionInput, StartSchemaExtensionOutput>(xAmzTarget: "DirectoryService_20150416.StartSchemaExtension"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<StartSchemaExtensionInput, StartSchemaExtensionOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.StartSchemaExtension"]))
         builder.serialize(ClientRuntime.BodyMiddleware<StartSchemaExtensionInput, StartSchemaExtensionOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: StartSchemaExtensionInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<StartSchemaExtensionInput, StartSchemaExtensionOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<StartSchemaExtensionOutput>())
@@ -5651,7 +5894,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UnshareDirectoryOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UnshareDirectoryInput, UnshareDirectoryOutput>(xAmzTarget: "DirectoryService_20150416.UnshareDirectory"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UnshareDirectoryInput, UnshareDirectoryOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.UnshareDirectory"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UnshareDirectoryInput, UnshareDirectoryOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UnshareDirectoryInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UnshareDirectoryInput, UnshareDirectoryOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UnshareDirectoryOutput>())
@@ -5725,7 +5968,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateConditionalForwarderOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateConditionalForwarderInput, UpdateConditionalForwarderOutput>(xAmzTarget: "DirectoryService_20150416.UpdateConditionalForwarder"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateConditionalForwarderInput, UpdateConditionalForwarderOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.UpdateConditionalForwarder"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateConditionalForwarderInput, UpdateConditionalForwarderOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateConditionalForwarderInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateConditionalForwarderInput, UpdateConditionalForwarderOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateConditionalForwarderOutput>())
@@ -5802,7 +6045,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateDirectorySetupOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateDirectorySetupInput, UpdateDirectorySetupOutput>(xAmzTarget: "DirectoryService_20150416.UpdateDirectorySetup"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateDirectorySetupInput, UpdateDirectorySetupOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.UpdateDirectorySetup"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateDirectorySetupInput, UpdateDirectorySetupOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateDirectorySetupInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateDirectorySetupInput, UpdateDirectorySetupOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateDirectorySetupOutput>())
@@ -5876,7 +6119,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateHybridADOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateHybridADInput, UpdateHybridADOutput>(xAmzTarget: "DirectoryService_20150416.UpdateHybridAD"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateHybridADInput, UpdateHybridADOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.UpdateHybridAD"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateHybridADInput, UpdateHybridADOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateHybridADInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateHybridADInput, UpdateHybridADOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateHybridADOutput>())
@@ -5951,7 +6194,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateNumberOfDomainControllersOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateNumberOfDomainControllersInput, UpdateNumberOfDomainControllersOutput>(xAmzTarget: "DirectoryService_20150416.UpdateNumberOfDomainControllers"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateNumberOfDomainControllersInput, UpdateNumberOfDomainControllersOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.UpdateNumberOfDomainControllers"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateNumberOfDomainControllersInput, UpdateNumberOfDomainControllersOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateNumberOfDomainControllersInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateNumberOfDomainControllersInput, UpdateNumberOfDomainControllersOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateNumberOfDomainControllersOutput>())
@@ -6023,7 +6266,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateRadiusOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateRadiusInput, UpdateRadiusOutput>(xAmzTarget: "DirectoryService_20150416.UpdateRadius"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateRadiusInput, UpdateRadiusOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.UpdateRadius"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateRadiusInput, UpdateRadiusOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateRadiusInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateRadiusInput, UpdateRadiusOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateRadiusOutput>())
@@ -6099,7 +6342,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateSettingsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateSettingsInput, UpdateSettingsOutput>(xAmzTarget: "DirectoryService_20150416.UpdateSettings"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateSettingsInput, UpdateSettingsOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.UpdateSettings"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateSettingsInput, UpdateSettingsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateSettingsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateSettingsInput, UpdateSettingsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateSettingsOutput>())
@@ -6171,7 +6414,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateTrustOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateTrustInput, UpdateTrustOutput>(xAmzTarget: "DirectoryService_20150416.UpdateTrust"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateTrustInput, UpdateTrustOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.UpdateTrust"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateTrustInput, UpdateTrustOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateTrustInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateTrustInput, UpdateTrustOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateTrustOutput>())
@@ -6244,7 +6487,7 @@ extension DirectoryClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<VerifyTrustOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<VerifyTrustInput, VerifyTrustOutput>(xAmzTarget: "DirectoryService_20150416.VerifyTrust"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<VerifyTrustInput, VerifyTrustOutput>(overrides: ["X-Amz-Target": "DirectoryService_20150416.VerifyTrust"]))
         builder.serialize(ClientRuntime.BodyMiddleware<VerifyTrustInput, VerifyTrustOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: VerifyTrustInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<VerifyTrustInput, VerifyTrustOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<VerifyTrustOutput>())

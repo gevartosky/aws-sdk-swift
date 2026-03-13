@@ -30,6 +30,7 @@ import enum AWSSDKChecksums.AWSChecksumCalculationMode
 import enum ClientRuntime.ClientLogMode
 import enum ClientRuntime.DefaultTelemetry
 import enum ClientRuntime.OrchestratorMetricsAttributesKeys
+import func ClientRuntime.initialize
 import protocol AWSClientRuntime.AWSDefaultClientConfiguration
 import protocol AWSClientRuntime.AWSRegionClientConfiguration
 import protocol AWSClientRuntime.AWSServiceClient
@@ -48,7 +49,6 @@ import protocol SmithyIdentity.BearerTokenIdentityResolver
 @_spi(AWSEndpointResolverMiddleware) import struct AWSClientRuntime.AWSEndpointResolverMiddleware
 import struct AWSClientRuntime.AmzSdkInvocationIdMiddleware
 import struct AWSClientRuntime.UserAgentMiddleware
-import struct AWSClientRuntime.XAmzTargetMiddleware
 import struct AWSSDKHTTPAuth.SigV4AuthScheme
 import struct ClientRuntime.AuthSchemeMiddleware
 @_spi(SmithyReadWrite) import struct ClientRuntime.BodyMiddleware
@@ -56,6 +56,9 @@ import struct ClientRuntime.ContentLengthMiddleware
 import struct ClientRuntime.ContentTypeMiddleware
 @_spi(SmithyReadWrite) import struct ClientRuntime.DeserializeMiddleware
 import struct ClientRuntime.LoggerMiddleware
+import struct ClientRuntime.MutateHeadersMiddleware
+import struct ClientRuntime.SendableHttpInterceptorProviderBox
+import struct ClientRuntime.SendableInterceptorProviderBox
 import struct ClientRuntime.SignerMiddleware
 import struct ClientRuntime.URLHostMiddleware
 import struct ClientRuntime.URLPathMiddleware
@@ -66,31 +69,49 @@ import struct SmithyRetries.DefaultRetryStrategy
 import struct SmithyRetriesAPI.RetryStrategyOptions
 import typealias SmithyHTTPAuthAPI.AuthSchemes
 
-public class MTurkClient: AWSClientRuntime.AWSServiceClient {
+public final class MTurkClient: AWSClientRuntime.AWSServiceClient {
     public static let clientName = "MTurkClient"
     let client: ClientRuntime.SdkHttpClient
-    let config: MTurkClient.MTurkClientConfiguration
+    public let config: MTurkClient.MTurkClientConfig
     let serviceName = "MTurk"
 
-    public required init(config: MTurkClient.MTurkClientConfiguration) {
+    @available(*, deprecated, message: "Use MTurkClient.MTurkClientConfig instead")
+    public typealias Config = MTurkClient.MTurkClientConfiguration
+    public typealias Configuration = MTurkClient.MTurkClientConfig
+
+    public required init(config: MTurkClient.MTurkClientConfig) {
+        ClientRuntime.initialize()
         client = ClientRuntime.SdkHttpClient(engine: config.httpClientEngine, config: config.httpClientConfiguration)
         self.config = config
     }
 
+    @available(*, deprecated, message: "Use init(config: MTurkClient.MTurkClientConfig) instead")
+    public convenience init(config: MTurkClient.MTurkClientConfiguration) {
+        do {
+            try self.init(config: config.toSendable())
+        } catch {
+            // This should never happen since all values are already initialized in the class
+            fatalError("Failed to convert deprecated configuration: \(error)")
+        }
+    }
+
     public convenience init(region: Swift.String) throws {
-        let config = try MTurkClient.MTurkClientConfiguration(region: region)
+        let config = try MTurkClient.MTurkClientConfig(region: region)
         self.init(config: config)
     }
 
-    public convenience required init() async throws {
-        let config = try await MTurkClient.MTurkClientConfiguration()
+    public convenience init() async throws {
+        let config = try await MTurkClient.MTurkClientConfig()
         self.init(config: config)
     }
 }
 
 extension MTurkClient {
 
-    public class MTurkClientConfiguration: AWSClientRuntime.AWSDefaultClientConfiguration & AWSClientRuntime.AWSRegionClientConfiguration & ClientRuntime.DefaultClientConfiguration & ClientRuntime.DefaultHttpClientConfiguration {
+    /// Client configuration for MTurkClient
+    ///
+    /// Conforms to `Sendable` for safe concurrent access across threads.
+    public struct MTurkClientConfig: AWSClientRuntime.AWSDefaultClientConfiguration & AWSClientRuntime.AWSRegionClientConfiguration & ClientRuntime.DefaultClientConfiguration & ClientRuntime.DefaultHttpClientConfiguration, Swift.Sendable {
         public var useFIPS: Swift.Bool?
         public var useDualStack: Swift.Bool?
         public var appID: Swift.String?
@@ -114,66 +135,29 @@ extension MTurkClient {
         public var authSchemePreference: [String]?
         public var authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver
         public var bearerTokenIdentityResolver: any SmithyIdentity.BearerTokenIdentityResolver
-        public private(set) var interceptorProviders: [ClientRuntime.InterceptorProvider]
-        public private(set) var httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]
-        public let logger: Smithy.LogAgent
-
-        private init(
-            _ useFIPS: Swift.Bool?,
-            _ useDualStack: Swift.Bool?,
-            _ appID: Swift.String?,
-            _ awsCredentialIdentityResolver: any SmithyIdentity.AWSCredentialIdentityResolver,
-            _ awsRetryMode: AWSClientRuntime.AWSRetryMode,
-            _ maxAttempts: Swift.Int?,
-            _ requestChecksumCalculation: AWSSDKChecksums.AWSChecksumCalculationMode,
-            _ responseChecksumValidation: AWSSDKChecksums.AWSChecksumCalculationMode,
-            _ ignoreConfiguredEndpointURLs: Swift.Bool?,
-            _ region: Swift.String?,
-            _ signingRegion: Swift.String?,
-            _ endpointResolver: EndpointResolver,
-            _ telemetryProvider: ClientRuntime.TelemetryProvider,
-            _ retryStrategyOptions: SmithyRetriesAPI.RetryStrategyOptions,
-            _ clientLogMode: ClientRuntime.ClientLogMode,
-            _ endpoint: Swift.String?,
-            _ idempotencyTokenGenerator: ClientRuntime.IdempotencyTokenGenerator,
-            _ httpClientEngine: SmithyHTTPAPI.HTTPClient,
-            _ httpClientConfiguration: ClientRuntime.HttpClientConfiguration,
-            _ authSchemes: SmithyHTTPAuthAPI.AuthSchemes?,
-            _ authSchemePreference: [String]?,
-            _ authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver,
-            _ bearerTokenIdentityResolver: any SmithyIdentity.BearerTokenIdentityResolver,
-            _ interceptorProviders: [ClientRuntime.InterceptorProvider],
-            _ httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]
-        ) {
-            self.useFIPS = useFIPS
-            self.useDualStack = useDualStack
-            self.appID = appID
-            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver
-            self.awsRetryMode = awsRetryMode
-            self.maxAttempts = maxAttempts
-            self.requestChecksumCalculation = requestChecksumCalculation
-            self.responseChecksumValidation = responseChecksumValidation
-            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
-            self.region = region
-            self.signingRegion = signingRegion
-            self.endpointResolver = endpointResolver
-            self.telemetryProvider = telemetryProvider
-            self.retryStrategyOptions = retryStrategyOptions
-            self.clientLogMode = clientLogMode
-            self.endpoint = endpoint
-            self.idempotencyTokenGenerator = idempotencyTokenGenerator
-            self.httpClientEngine = httpClientEngine
-            self.httpClientConfiguration = httpClientConfiguration
-            self.authSchemes = authSchemes
-            self.authSchemePreference = authSchemePreference
-            self.authSchemeResolver = authSchemeResolver
-            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver
-            self.interceptorProviders = interceptorProviders
-            self.httpInterceptorProviders = httpInterceptorProviders
-            self.logger = telemetryProvider.loggerProvider.getLogger(name: MTurkClient.clientName)
+        // Interceptor providers with Sendable-safe internal storage
+        private var _interceptorProviders: [ClientRuntime.SendableInterceptorProviderBox] = []
+        public var interceptorProviders: [ClientRuntime.InterceptorProvider] {
+            get {
+                return _interceptorProviders
+            }
+            set {
+                _interceptorProviders = newValue.map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            }
         }
 
-        public convenience init(
+        private var _httpInterceptorProviders: [ClientRuntime.SendableHttpInterceptorProviderBox] = []
+        public var httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider] {
+            get {
+                return _httpInterceptorProviders
+            }
+            set {
+                _httpInterceptorProviders = newValue.map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            }
+        }
+        public var logger: Smithy.LogAgent
+
+        public init(
             useFIPS: Swift.Bool? = nil,
             useDualStack: Swift.Bool? = nil,
             appID: Swift.String? = nil,
@@ -200,36 +184,35 @@ extension MTurkClient {
             interceptorProviders: [ClientRuntime.InterceptorProvider]? = nil,
             httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]? = nil
         ) throws {
-            self.init(
-                useFIPS,
-                useDualStack,
-                try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
-                awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
-                try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
-                maxAttempts,
-                try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation),
-                try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation),
-                ignoreConfiguredEndpointURLs,
-                region,
-                signingRegion,
-                try endpointResolver ?? DefaultEndpointResolver(),
-                telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider,
-                try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts),
-                clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode(),
-                endpoint,
-                idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
-                httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration),
-                httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration(),
-                authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()],
-                authSchemePreference ?? nil,
-                authSchemeResolver ?? DefaultMTurkAuthSchemeResolver(),
-                bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
-                interceptorProviders ?? [],
-                httpInterceptorProviders ?? []
-            )
+            self.useFIPS = useFIPS
+            self.useDualStack = useDualStack
+            self.appID = try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID()
+            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain()
+            self.awsRetryMode = try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode()
+            self.maxAttempts = maxAttempts
+            self.requestChecksumCalculation = try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation)
+            self.responseChecksumValidation = try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation)
+            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
+            self.region = region
+            self.signingRegion = signingRegion
+            self.endpointResolver = try endpointResolver ?? DefaultEndpointResolver()
+            self.telemetryProvider = telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider
+            self.retryStrategyOptions = try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts)
+            self.clientLogMode = clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode()
+            self.endpoint = endpoint
+            self.idempotencyTokenGenerator = idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator()
+            self.httpClientEngine = httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration)
+            self.httpClientConfiguration = httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration()
+            self.authSchemes = authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()]
+            self.authSchemePreference = authSchemePreference ?? nil
+            self.authSchemeResolver = authSchemeResolver ?? DefaultMTurkAuthSchemeResolver()
+            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: ""))
+            self._interceptorProviders = (interceptorProviders ?? []).map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            self._httpInterceptorProviders = (httpInterceptorProviders ?? []).map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            self.logger = (telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider).loggerProvider.getLogger(name: MTurkClient.clientName)
         }
 
-        public convenience init(
+        public init(
             useFIPS: Swift.Bool? = nil,
             useDualStack: Swift.Bool? = nil,
             appID: Swift.String? = nil,
@@ -256,36 +239,266 @@ extension MTurkClient {
             interceptorProviders: [ClientRuntime.InterceptorProvider]? = nil,
             httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]? = nil
         ) async throws {
-            self.init(
-                useFIPS,
-                useDualStack,
-                try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
-                awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
-                try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
-                maxAttempts,
-                try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation),
-                try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation),
-                ignoreConfiguredEndpointURLs,
-                try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region),
-                try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region),
-                try endpointResolver ?? DefaultEndpointResolver(),
-                telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider,
-                try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts),
-                clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode(),
-                endpoint,
-                idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
-                httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration),
-                httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration(),
-                authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()],
-                authSchemePreference ?? nil,
-                authSchemeResolver ?? DefaultMTurkAuthSchemeResolver(),
-                bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
-                interceptorProviders ?? [],
-                httpInterceptorProviders ?? []
+            self.useFIPS = useFIPS
+            self.useDualStack = useDualStack
+            self.appID = try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID()
+            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain()
+            self.awsRetryMode = try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode()
+            self.maxAttempts = maxAttempts
+            self.requestChecksumCalculation = try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation)
+            self.responseChecksumValidation = try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation)
+            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
+            self.region = try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region)
+            self.signingRegion = try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region)
+            self.endpointResolver = try endpointResolver ?? DefaultEndpointResolver()
+            self.telemetryProvider = telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider
+            self.retryStrategyOptions = try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts)
+            self.clientLogMode = clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode()
+            self.endpoint = endpoint
+            self.idempotencyTokenGenerator = idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator()
+            self.httpClientEngine = httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration)
+            self.httpClientConfiguration = httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration()
+            self.authSchemes = authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()]
+            self.authSchemePreference = authSchemePreference ?? nil
+            self.authSchemeResolver = authSchemeResolver ?? DefaultMTurkAuthSchemeResolver()
+            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: ""))
+            self._interceptorProviders = (interceptorProviders ?? []).map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            self._httpInterceptorProviders = (httpInterceptorProviders ?? []).map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            self.logger = (telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider).loggerProvider.getLogger(name: MTurkClient.clientName)
+        }
+
+        public init() async throws {
+            try await self.init(
+                useFIPS: nil,
+                useDualStack: nil,
+                appID: nil,
+                awsCredentialIdentityResolver: nil,
+                awsRetryMode: nil,
+                maxAttempts: nil,
+                requestChecksumCalculation: nil,
+                responseChecksumValidation: nil,
+                ignoreConfiguredEndpointURLs: nil,
+                region: nil,
+                signingRegion: nil,
+                endpointResolver: nil,
+                telemetryProvider: nil,
+                retryStrategyOptions: nil,
+                clientLogMode: nil,
+                endpoint: nil,
+                idempotencyTokenGenerator: nil,
+                httpClientEngine: nil,
+                httpClientConfiguration: nil,
+                authSchemes: nil,
+                authSchemePreference: nil,
+                authSchemeResolver: nil,
+                bearerTokenIdentityResolver: nil,
+                interceptorProviders: nil,
+                httpInterceptorProviders: nil
             )
         }
 
-        public convenience required init() async throws {
+        public init(region: Swift.String) throws {
+            try self.init(
+                useFIPS: nil,
+                useDualStack: nil,
+                appID: try AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
+                awsCredentialIdentityResolver: AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
+                awsRetryMode: try AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
+                maxAttempts: nil,
+                requestChecksumCalculation: try AWSClientConfigDefaultsProvider.requestChecksumCalculation(),
+                responseChecksumValidation: try AWSClientConfigDefaultsProvider.responseChecksumValidation(),
+                ignoreConfiguredEndpointURLs: nil,
+                region: region,
+                signingRegion: region,
+                endpointResolver: try DefaultEndpointResolver(),
+                telemetryProvider: ClientRuntime.DefaultTelemetry.provider,
+                retryStrategyOptions: try AWSClientConfigDefaultsProvider.retryStrategyOptions(),
+                clientLogMode: AWSClientConfigDefaultsProvider.clientLogMode(),
+                endpoint: nil,
+                idempotencyTokenGenerator: AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
+                httpClientEngine: AWSClientConfigDefaultsProvider.httpClientEngine(),
+                httpClientConfiguration: AWSClientConfigDefaultsProvider.httpClientConfiguration(),
+                authSchemes: [AWSSDKHTTPAuth.SigV4AuthScheme()],
+                authSchemePreference: nil,
+                authSchemeResolver: DefaultMTurkAuthSchemeResolver(),
+                bearerTokenIdentityResolver: SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
+                interceptorProviders: [],
+                httpInterceptorProviders: []
+            )
+        }
+
+        public var partitionID: String? {
+            return "\(MTurkClient.clientName) - \(region ?? "")"
+        }
+
+        public mutating func addInterceptorProvider(_ provider: ClientRuntime.InterceptorProvider) {
+            self._interceptorProviders.append(ClientRuntime.SendableInterceptorProviderBox(provider))
+        }
+
+        public mutating func addInterceptorProvider(_ provider: ClientRuntime.HttpInterceptorProvider) {
+            self._httpInterceptorProviders.append(ClientRuntime.SendableHttpInterceptorProviderBox(provider))
+        }
+
+    }
+
+    @available(*, deprecated, message: "Use MTurkClientConfig instead. This class will be removed in a future version.")
+    public final class MTurkClientConfiguration: AWSClientRuntime.AWSDefaultClientConfiguration & AWSClientRuntime.AWSRegionClientConfiguration & ClientRuntime.DefaultClientConfiguration & ClientRuntime.DefaultHttpClientConfiguration {
+        public var useFIPS: Swift.Bool?
+        public var useDualStack: Swift.Bool?
+        public var appID: Swift.String?
+        public var awsCredentialIdentityResolver: any SmithyIdentity.AWSCredentialIdentityResolver
+        public var awsRetryMode: AWSClientRuntime.AWSRetryMode
+        public var maxAttempts: Swift.Int?
+        public var requestChecksumCalculation: AWSSDKChecksums.AWSChecksumCalculationMode
+        public var responseChecksumValidation: AWSSDKChecksums.AWSChecksumCalculationMode
+        public var ignoreConfiguredEndpointURLs: Swift.Bool?
+        public var region: Swift.String?
+        public var signingRegion: Swift.String?
+        public var endpointResolver: EndpointResolver
+        public var telemetryProvider: ClientRuntime.TelemetryProvider
+        public var retryStrategyOptions: SmithyRetriesAPI.RetryStrategyOptions
+        public var clientLogMode: ClientRuntime.ClientLogMode
+        public var endpoint: Swift.String?
+        public var idempotencyTokenGenerator: ClientRuntime.IdempotencyTokenGenerator
+        public var httpClientEngine: SmithyHTTPAPI.HTTPClient
+        public var httpClientConfiguration: ClientRuntime.HttpClientConfiguration
+        public var authSchemes: SmithyHTTPAuthAPI.AuthSchemes?
+        public var authSchemePreference: [String]?
+        public var authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver
+        public var bearerTokenIdentityResolver: any SmithyIdentity.BearerTokenIdentityResolver
+        // Interceptor providers with Sendable-safe internal storage
+        private var _interceptorProviders: [ClientRuntime.SendableInterceptorProviderBox] = []
+        public var interceptorProviders: [ClientRuntime.InterceptorProvider] {
+            get {
+                return _interceptorProviders
+            }
+            set {
+                _interceptorProviders = newValue.map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            }
+        }
+
+        private var _httpInterceptorProviders: [ClientRuntime.SendableHttpInterceptorProviderBox] = []
+        public var httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider] {
+            get {
+                return _httpInterceptorProviders
+            }
+            set {
+                _httpInterceptorProviders = newValue.map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            }
+        }
+        public var logger: Smithy.LogAgent
+
+        public init(
+            useFIPS: Swift.Bool? = nil,
+            useDualStack: Swift.Bool? = nil,
+            appID: Swift.String? = nil,
+            awsCredentialIdentityResolver: (any SmithyIdentity.AWSCredentialIdentityResolver)? = nil,
+            awsRetryMode: AWSClientRuntime.AWSRetryMode? = nil,
+            maxAttempts: Swift.Int? = nil,
+            requestChecksumCalculation: AWSSDKChecksums.AWSChecksumCalculationMode? = nil,
+            responseChecksumValidation: AWSSDKChecksums.AWSChecksumCalculationMode? = nil,
+            ignoreConfiguredEndpointURLs: Swift.Bool? = nil,
+            region: Swift.String? = nil,
+            signingRegion: Swift.String? = nil,
+            endpointResolver: EndpointResolver? = nil,
+            telemetryProvider: ClientRuntime.TelemetryProvider? = nil,
+            retryStrategyOptions: SmithyRetriesAPI.RetryStrategyOptions? = nil,
+            clientLogMode: ClientRuntime.ClientLogMode? = nil,
+            endpoint: Swift.String? = nil,
+            idempotencyTokenGenerator: ClientRuntime.IdempotencyTokenGenerator? = nil,
+            httpClientEngine: SmithyHTTPAPI.HTTPClient? = nil,
+            httpClientConfiguration: ClientRuntime.HttpClientConfiguration? = nil,
+            authSchemes: SmithyHTTPAuthAPI.AuthSchemes? = nil,
+            authSchemePreference: [String]? = nil,
+            authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver? = nil,
+            bearerTokenIdentityResolver: (any SmithyIdentity.BearerTokenIdentityResolver)? = nil,
+            interceptorProviders: [ClientRuntime.InterceptorProvider]? = nil,
+            httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]? = nil
+        ) throws {
+            self.useFIPS = useFIPS
+            self.useDualStack = useDualStack
+            self.appID = try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID()
+            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain()
+            self.awsRetryMode = try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode()
+            self.maxAttempts = maxAttempts
+            self.requestChecksumCalculation = try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation)
+            self.responseChecksumValidation = try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation)
+            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
+            self.region = region
+            self.signingRegion = signingRegion
+            self.endpointResolver = try endpointResolver ?? DefaultEndpointResolver()
+            self.telemetryProvider = telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider
+            self.retryStrategyOptions = try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts)
+            self.clientLogMode = clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode()
+            self.endpoint = endpoint
+            self.idempotencyTokenGenerator = idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator()
+            self.httpClientEngine = httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration)
+            self.httpClientConfiguration = httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration()
+            self.authSchemes = authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()]
+            self.authSchemePreference = authSchemePreference ?? nil
+            self.authSchemeResolver = authSchemeResolver ?? DefaultMTurkAuthSchemeResolver()
+            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: ""))
+            self._interceptorProviders = (interceptorProviders ?? []).map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            self._httpInterceptorProviders = (httpInterceptorProviders ?? []).map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            self.logger = (telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider).loggerProvider.getLogger(name: MTurkClient.clientName)
+        }
+
+        public init(
+            useFIPS: Swift.Bool? = nil,
+            useDualStack: Swift.Bool? = nil,
+            appID: Swift.String? = nil,
+            awsCredentialIdentityResolver: (any SmithyIdentity.AWSCredentialIdentityResolver)? = nil,
+            awsRetryMode: AWSClientRuntime.AWSRetryMode? = nil,
+            maxAttempts: Swift.Int? = nil,
+            requestChecksumCalculation: AWSSDKChecksums.AWSChecksumCalculationMode? = nil,
+            responseChecksumValidation: AWSSDKChecksums.AWSChecksumCalculationMode? = nil,
+            ignoreConfiguredEndpointURLs: Swift.Bool? = nil,
+            region: Swift.String? = nil,
+            signingRegion: Swift.String? = nil,
+            endpointResolver: EndpointResolver? = nil,
+            telemetryProvider: ClientRuntime.TelemetryProvider? = nil,
+            retryStrategyOptions: SmithyRetriesAPI.RetryStrategyOptions? = nil,
+            clientLogMode: ClientRuntime.ClientLogMode? = nil,
+            endpoint: Swift.String? = nil,
+            idempotencyTokenGenerator: ClientRuntime.IdempotencyTokenGenerator? = nil,
+            httpClientEngine: SmithyHTTPAPI.HTTPClient? = nil,
+            httpClientConfiguration: ClientRuntime.HttpClientConfiguration? = nil,
+            authSchemes: SmithyHTTPAuthAPI.AuthSchemes? = nil,
+            authSchemePreference: [String]? = nil,
+            authSchemeResolver: SmithyHTTPAuthAPI.AuthSchemeResolver? = nil,
+            bearerTokenIdentityResolver: (any SmithyIdentity.BearerTokenIdentityResolver)? = nil,
+            interceptorProviders: [ClientRuntime.InterceptorProvider]? = nil,
+            httpInterceptorProviders: [ClientRuntime.HttpInterceptorProvider]? = nil
+        ) async throws {
+            self.useFIPS = useFIPS
+            self.useDualStack = useDualStack
+            self.appID = try appID ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.appID()
+            self.awsCredentialIdentityResolver = awsCredentialIdentityResolver ?? AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain()
+            self.awsRetryMode = try awsRetryMode ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode()
+            self.maxAttempts = maxAttempts
+            self.requestChecksumCalculation = try requestChecksumCalculation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.requestChecksumCalculation(requestChecksumCalculation)
+            self.responseChecksumValidation = try responseChecksumValidation ?? AWSClientRuntime.AWSClientConfigDefaultsProvider.responseChecksumValidation(responseChecksumValidation)
+            self.ignoreConfiguredEndpointURLs = ignoreConfiguredEndpointURLs
+            self.region = try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region)
+            self.signingRegion = try await AWSClientRuntime.AWSClientConfigDefaultsProvider.region(region)
+            self.endpointResolver = try endpointResolver ?? DefaultEndpointResolver()
+            self.telemetryProvider = telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider
+            self.retryStrategyOptions = try retryStrategyOptions ?? AWSClientConfigDefaultsProvider.retryStrategyOptions(awsRetryMode, maxAttempts)
+            self.clientLogMode = clientLogMode ?? AWSClientConfigDefaultsProvider.clientLogMode()
+            self.endpoint = endpoint
+            self.idempotencyTokenGenerator = idempotencyTokenGenerator ?? AWSClientConfigDefaultsProvider.idempotencyTokenGenerator()
+            self.httpClientEngine = httpClientEngine ?? AWSClientConfigDefaultsProvider.httpClientEngine(httpClientConfiguration)
+            self.httpClientConfiguration = httpClientConfiguration ?? AWSClientConfigDefaultsProvider.httpClientConfiguration()
+            self.authSchemes = authSchemes ?? [AWSSDKHTTPAuth.SigV4AuthScheme()]
+            self.authSchemePreference = authSchemePreference ?? nil
+            self.authSchemeResolver = authSchemeResolver ?? DefaultMTurkAuthSchemeResolver()
+            self.bearerTokenIdentityResolver = bearerTokenIdentityResolver ?? SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: ""))
+            self._interceptorProviders = (interceptorProviders ?? []).map { ClientRuntime.SendableInterceptorProviderBox($0) }
+            self._httpInterceptorProviders = (httpInterceptorProviders ?? []).map { ClientRuntime.SendableHttpInterceptorProviderBox($0) }
+            self.logger = (telemetryProvider ?? ClientRuntime.DefaultTelemetry.provider).loggerProvider.getLogger(name: MTurkClient.clientName)
+        }
+
+        public convenience init() async throws {
             try await self.init(
                 useFIPS: nil,
                 useDualStack: nil,
@@ -316,32 +529,32 @@ extension MTurkClient {
         }
 
         public convenience init(region: Swift.String) throws {
-            self.init(
-                nil,
-                nil,
-                try AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
-                AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
-                try AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
-                nil,
-                try AWSClientConfigDefaultsProvider.requestChecksumCalculation(),
-                try AWSClientConfigDefaultsProvider.responseChecksumValidation(),
-                nil,
-                region,
-                region,
-                try DefaultEndpointResolver(),
-                ClientRuntime.DefaultTelemetry.provider,
-                try AWSClientConfigDefaultsProvider.retryStrategyOptions(),
-                AWSClientConfigDefaultsProvider.clientLogMode(),
-                nil,
-                AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
-                AWSClientConfigDefaultsProvider.httpClientEngine(),
-                AWSClientConfigDefaultsProvider.httpClientConfiguration(),
-                [AWSSDKHTTPAuth.SigV4AuthScheme()],
-                nil,
-                DefaultMTurkAuthSchemeResolver(),
-                SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
-                [],
-                []
+            try self.init(
+                useFIPS: nil,
+                useDualStack: nil,
+                appID: try AWSClientRuntime.AWSClientConfigDefaultsProvider.appID(),
+                awsCredentialIdentityResolver: AWSSDKIdentity.DefaultAWSCredentialIdentityResolverChain(),
+                awsRetryMode: try AWSClientRuntime.AWSClientConfigDefaultsProvider.retryMode(),
+                maxAttempts: nil,
+                requestChecksumCalculation: try AWSClientConfigDefaultsProvider.requestChecksumCalculation(),
+                responseChecksumValidation: try AWSClientConfigDefaultsProvider.responseChecksumValidation(),
+                ignoreConfiguredEndpointURLs: nil,
+                region: region,
+                signingRegion: region,
+                endpointResolver: try DefaultEndpointResolver(),
+                telemetryProvider: ClientRuntime.DefaultTelemetry.provider,
+                retryStrategyOptions: try AWSClientConfigDefaultsProvider.retryStrategyOptions(),
+                clientLogMode: AWSClientConfigDefaultsProvider.clientLogMode(),
+                endpoint: nil,
+                idempotencyTokenGenerator: AWSClientConfigDefaultsProvider.idempotencyTokenGenerator(),
+                httpClientEngine: AWSClientConfigDefaultsProvider.httpClientEngine(),
+                httpClientConfiguration: AWSClientConfigDefaultsProvider.httpClientConfiguration(),
+                authSchemes: [AWSSDKHTTPAuth.SigV4AuthScheme()],
+                authSchemePreference: nil,
+                authSchemeResolver: DefaultMTurkAuthSchemeResolver(),
+                bearerTokenIdentityResolver: SmithyIdentity.StaticBearerTokenIdentityResolver(token: SmithyIdentity.BearerTokenIdentity(token: "")),
+                interceptorProviders: [],
+                httpInterceptorProviders: []
             )
         }
 
@@ -349,12 +562,42 @@ extension MTurkClient {
             return "\(MTurkClient.clientName) - \(region ?? "")"
         }
 
+        public func toSendable() throws -> MTurkClientConfig {
+            return try MTurkClientConfig(
+                useFIPS: self.useFIPS,
+                useDualStack: self.useDualStack,
+                appID: self.appID,
+                awsCredentialIdentityResolver: self.awsCredentialIdentityResolver,
+                awsRetryMode: self.awsRetryMode,
+                maxAttempts: self.maxAttempts,
+                requestChecksumCalculation: self.requestChecksumCalculation,
+                responseChecksumValidation: self.responseChecksumValidation,
+                ignoreConfiguredEndpointURLs: self.ignoreConfiguredEndpointURLs,
+                region: self.region,
+                signingRegion: self.signingRegion,
+                endpointResolver: self.endpointResolver,
+                telemetryProvider: self.telemetryProvider,
+                retryStrategyOptions: self.retryStrategyOptions,
+                clientLogMode: self.clientLogMode,
+                endpoint: self.endpoint,
+                idempotencyTokenGenerator: self.idempotencyTokenGenerator,
+                httpClientEngine: self.httpClientEngine,
+                httpClientConfiguration: self.httpClientConfiguration,
+                authSchemes: self.authSchemes,
+                authSchemePreference: self.authSchemePreference,
+                authSchemeResolver: self.authSchemeResolver,
+                bearerTokenIdentityResolver: self.bearerTokenIdentityResolver,
+                interceptorProviders: self.interceptorProviders,
+                httpInterceptorProviders: self.httpInterceptorProviders
+            )
+        }
+
         public func addInterceptorProvider(_ provider: ClientRuntime.InterceptorProvider) {
-            self.interceptorProviders.append(provider)
+            self._interceptorProviders.append(ClientRuntime.SendableInterceptorProviderBox(provider))
         }
 
         public func addInterceptorProvider(_ provider: ClientRuntime.HttpInterceptorProvider) {
-            self.httpInterceptorProviders.append(provider)
+            self._httpInterceptorProviders.append(ClientRuntime.SendableHttpInterceptorProviderBox(provider))
         }
 
     }
@@ -417,7 +660,7 @@ extension MTurkClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<AcceptQualificationRequestOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<AcceptQualificationRequestInput, AcceptQualificationRequestOutput>(xAmzTarget: "MTurkRequesterServiceV20170117.AcceptQualificationRequest"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<AcceptQualificationRequestInput, AcceptQualificationRequestOutput>(overrides: ["X-Amz-Target": "MTurkRequesterServiceV20170117.AcceptQualificationRequest"]))
         builder.serialize(ClientRuntime.BodyMiddleware<AcceptQualificationRequestInput, AcceptQualificationRequestOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: AcceptQualificationRequestInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<AcceptQualificationRequestInput, AcceptQualificationRequestOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<AcceptQualificationRequestOutput>())
@@ -494,7 +737,7 @@ extension MTurkClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ApproveAssignmentOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ApproveAssignmentInput, ApproveAssignmentOutput>(xAmzTarget: "MTurkRequesterServiceV20170117.ApproveAssignment"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ApproveAssignmentInput, ApproveAssignmentOutput>(overrides: ["X-Amz-Target": "MTurkRequesterServiceV20170117.ApproveAssignment"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ApproveAssignmentInput, ApproveAssignmentOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ApproveAssignmentInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ApproveAssignmentInput, ApproveAssignmentOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ApproveAssignmentOutput>())
@@ -564,7 +807,7 @@ extension MTurkClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<AssociateQualificationWithWorkerOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<AssociateQualificationWithWorkerInput, AssociateQualificationWithWorkerOutput>(xAmzTarget: "MTurkRequesterServiceV20170117.AssociateQualificationWithWorker"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<AssociateQualificationWithWorkerInput, AssociateQualificationWithWorkerOutput>(overrides: ["X-Amz-Target": "MTurkRequesterServiceV20170117.AssociateQualificationWithWorker"]))
         builder.serialize(ClientRuntime.BodyMiddleware<AssociateQualificationWithWorkerInput, AssociateQualificationWithWorkerOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: AssociateQualificationWithWorkerInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<AssociateQualificationWithWorkerInput, AssociateQualificationWithWorkerOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<AssociateQualificationWithWorkerOutput>())
@@ -638,7 +881,7 @@ extension MTurkClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateAdditionalAssignmentsForHITOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateAdditionalAssignmentsForHITInput, CreateAdditionalAssignmentsForHITOutput>(xAmzTarget: "MTurkRequesterServiceV20170117.CreateAdditionalAssignmentsForHIT"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateAdditionalAssignmentsForHITInput, CreateAdditionalAssignmentsForHITOutput>(overrides: ["X-Amz-Target": "MTurkRequesterServiceV20170117.CreateAdditionalAssignmentsForHIT"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateAdditionalAssignmentsForHITInput, CreateAdditionalAssignmentsForHITOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateAdditionalAssignmentsForHITInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateAdditionalAssignmentsForHITInput, CreateAdditionalAssignmentsForHITOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateAdditionalAssignmentsForHITOutput>())
@@ -708,7 +951,7 @@ extension MTurkClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateHITOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateHITInput, CreateHITOutput>(xAmzTarget: "MTurkRequesterServiceV20170117.CreateHIT"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateHITInput, CreateHITOutput>(overrides: ["X-Amz-Target": "MTurkRequesterServiceV20170117.CreateHIT"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateHITInput, CreateHITOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateHITInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateHITInput, CreateHITOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateHITOutput>())
@@ -778,7 +1021,7 @@ extension MTurkClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateHITTypeOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateHITTypeInput, CreateHITTypeOutput>(xAmzTarget: "MTurkRequesterServiceV20170117.CreateHITType"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateHITTypeInput, CreateHITTypeOutput>(overrides: ["X-Amz-Target": "MTurkRequesterServiceV20170117.CreateHITType"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateHITTypeInput, CreateHITTypeOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateHITTypeInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateHITTypeInput, CreateHITTypeOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateHITTypeOutput>())
@@ -848,7 +1091,7 @@ extension MTurkClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateHITWithHITTypeOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateHITWithHITTypeInput, CreateHITWithHITTypeOutput>(xAmzTarget: "MTurkRequesterServiceV20170117.CreateHITWithHITType"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateHITWithHITTypeInput, CreateHITWithHITTypeOutput>(overrides: ["X-Amz-Target": "MTurkRequesterServiceV20170117.CreateHITWithHITType"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateHITWithHITTypeInput, CreateHITWithHITTypeOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateHITWithHITTypeInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateHITWithHITTypeInput, CreateHITWithHITTypeOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateHITWithHITTypeOutput>())
@@ -918,7 +1161,7 @@ extension MTurkClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateQualificationTypeOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateQualificationTypeInput, CreateQualificationTypeOutput>(xAmzTarget: "MTurkRequesterServiceV20170117.CreateQualificationType"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateQualificationTypeInput, CreateQualificationTypeOutput>(overrides: ["X-Amz-Target": "MTurkRequesterServiceV20170117.CreateQualificationType"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateQualificationTypeInput, CreateQualificationTypeOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateQualificationTypeInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateQualificationTypeInput, CreateQualificationTypeOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateQualificationTypeOutput>())
@@ -988,7 +1231,7 @@ extension MTurkClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<CreateWorkerBlockOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<CreateWorkerBlockInput, CreateWorkerBlockOutput>(xAmzTarget: "MTurkRequesterServiceV20170117.CreateWorkerBlock"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<CreateWorkerBlockInput, CreateWorkerBlockOutput>(overrides: ["X-Amz-Target": "MTurkRequesterServiceV20170117.CreateWorkerBlock"]))
         builder.serialize(ClientRuntime.BodyMiddleware<CreateWorkerBlockInput, CreateWorkerBlockOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: CreateWorkerBlockInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<CreateWorkerBlockInput, CreateWorkerBlockOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<CreateWorkerBlockOutput>())
@@ -1066,7 +1309,7 @@ extension MTurkClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteHITOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteHITInput, DeleteHITOutput>(xAmzTarget: "MTurkRequesterServiceV20170117.DeleteHIT"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteHITInput, DeleteHITOutput>(overrides: ["X-Amz-Target": "MTurkRequesterServiceV20170117.DeleteHIT"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteHITInput, DeleteHITOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteHITInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteHITInput, DeleteHITOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteHITOutput>())
@@ -1136,7 +1379,7 @@ extension MTurkClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteQualificationTypeOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteQualificationTypeInput, DeleteQualificationTypeOutput>(xAmzTarget: "MTurkRequesterServiceV20170117.DeleteQualificationType"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteQualificationTypeInput, DeleteQualificationTypeOutput>(overrides: ["X-Amz-Target": "MTurkRequesterServiceV20170117.DeleteQualificationType"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteQualificationTypeInput, DeleteQualificationTypeOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteQualificationTypeInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteQualificationTypeInput, DeleteQualificationTypeOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteQualificationTypeOutput>())
@@ -1206,7 +1449,7 @@ extension MTurkClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DeleteWorkerBlockOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DeleteWorkerBlockInput, DeleteWorkerBlockOutput>(xAmzTarget: "MTurkRequesterServiceV20170117.DeleteWorkerBlock"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DeleteWorkerBlockInput, DeleteWorkerBlockOutput>(overrides: ["X-Amz-Target": "MTurkRequesterServiceV20170117.DeleteWorkerBlock"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DeleteWorkerBlockInput, DeleteWorkerBlockOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DeleteWorkerBlockInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DeleteWorkerBlockInput, DeleteWorkerBlockOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DeleteWorkerBlockOutput>())
@@ -1276,7 +1519,7 @@ extension MTurkClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<DisassociateQualificationFromWorkerOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<DisassociateQualificationFromWorkerInput, DisassociateQualificationFromWorkerOutput>(xAmzTarget: "MTurkRequesterServiceV20170117.DisassociateQualificationFromWorker"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<DisassociateQualificationFromWorkerInput, DisassociateQualificationFromWorkerOutput>(overrides: ["X-Amz-Target": "MTurkRequesterServiceV20170117.DisassociateQualificationFromWorker"]))
         builder.serialize(ClientRuntime.BodyMiddleware<DisassociateQualificationFromWorkerInput, DisassociateQualificationFromWorkerOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: DisassociateQualificationFromWorkerInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<DisassociateQualificationFromWorkerInput, DisassociateQualificationFromWorkerOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<DisassociateQualificationFromWorkerOutput>())
@@ -1346,7 +1589,7 @@ extension MTurkClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetAccountBalanceOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetAccountBalanceInput, GetAccountBalanceOutput>(xAmzTarget: "MTurkRequesterServiceV20170117.GetAccountBalance"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetAccountBalanceInput, GetAccountBalanceOutput>(overrides: ["X-Amz-Target": "MTurkRequesterServiceV20170117.GetAccountBalance"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetAccountBalanceInput, GetAccountBalanceOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetAccountBalanceInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetAccountBalanceInput, GetAccountBalanceOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetAccountBalanceOutput>())
@@ -1416,7 +1659,7 @@ extension MTurkClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetAssignmentOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetAssignmentInput, GetAssignmentOutput>(xAmzTarget: "MTurkRequesterServiceV20170117.GetAssignment"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetAssignmentInput, GetAssignmentOutput>(overrides: ["X-Amz-Target": "MTurkRequesterServiceV20170117.GetAssignment"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetAssignmentInput, GetAssignmentOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetAssignmentInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetAssignmentInput, GetAssignmentOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetAssignmentOutput>())
@@ -1489,7 +1732,7 @@ extension MTurkClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetFileUploadURLOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetFileUploadURLInput, GetFileUploadURLOutput>(xAmzTarget: "MTurkRequesterServiceV20170117.GetFileUploadURL"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetFileUploadURLInput, GetFileUploadURLOutput>(overrides: ["X-Amz-Target": "MTurkRequesterServiceV20170117.GetFileUploadURL"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetFileUploadURLInput, GetFileUploadURLOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetFileUploadURLInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetFileUploadURLInput, GetFileUploadURLOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetFileUploadURLOutput>())
@@ -1559,7 +1802,7 @@ extension MTurkClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetHITOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetHITInput, GetHITOutput>(xAmzTarget: "MTurkRequesterServiceV20170117.GetHIT"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetHITInput, GetHITOutput>(overrides: ["X-Amz-Target": "MTurkRequesterServiceV20170117.GetHIT"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetHITInput, GetHITOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetHITInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetHITInput, GetHITOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetHITOutput>())
@@ -1629,7 +1872,7 @@ extension MTurkClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetQualificationScoreOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetQualificationScoreInput, GetQualificationScoreOutput>(xAmzTarget: "MTurkRequesterServiceV20170117.GetQualificationScore"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetQualificationScoreInput, GetQualificationScoreOutput>(overrides: ["X-Amz-Target": "MTurkRequesterServiceV20170117.GetQualificationScore"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetQualificationScoreInput, GetQualificationScoreOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetQualificationScoreInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetQualificationScoreInput, GetQualificationScoreOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetQualificationScoreOutput>())
@@ -1699,7 +1942,7 @@ extension MTurkClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<GetQualificationTypeOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<GetQualificationTypeInput, GetQualificationTypeOutput>(xAmzTarget: "MTurkRequesterServiceV20170117.GetQualificationType"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<GetQualificationTypeInput, GetQualificationTypeOutput>(overrides: ["X-Amz-Target": "MTurkRequesterServiceV20170117.GetQualificationType"]))
         builder.serialize(ClientRuntime.BodyMiddleware<GetQualificationTypeInput, GetQualificationTypeOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: GetQualificationTypeInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<GetQualificationTypeInput, GetQualificationTypeOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<GetQualificationTypeOutput>())
@@ -1769,7 +2012,7 @@ extension MTurkClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListAssignmentsForHITOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListAssignmentsForHITInput, ListAssignmentsForHITOutput>(xAmzTarget: "MTurkRequesterServiceV20170117.ListAssignmentsForHIT"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListAssignmentsForHITInput, ListAssignmentsForHITOutput>(overrides: ["X-Amz-Target": "MTurkRequesterServiceV20170117.ListAssignmentsForHIT"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListAssignmentsForHITInput, ListAssignmentsForHITOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListAssignmentsForHITInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListAssignmentsForHITInput, ListAssignmentsForHITOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListAssignmentsForHITOutput>())
@@ -1839,7 +2082,7 @@ extension MTurkClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListBonusPaymentsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListBonusPaymentsInput, ListBonusPaymentsOutput>(xAmzTarget: "MTurkRequesterServiceV20170117.ListBonusPayments"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListBonusPaymentsInput, ListBonusPaymentsOutput>(overrides: ["X-Amz-Target": "MTurkRequesterServiceV20170117.ListBonusPayments"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListBonusPaymentsInput, ListBonusPaymentsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListBonusPaymentsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListBonusPaymentsInput, ListBonusPaymentsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListBonusPaymentsOutput>())
@@ -1909,7 +2152,7 @@ extension MTurkClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListHITsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListHITsInput, ListHITsOutput>(xAmzTarget: "MTurkRequesterServiceV20170117.ListHITs"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListHITsInput, ListHITsOutput>(overrides: ["X-Amz-Target": "MTurkRequesterServiceV20170117.ListHITs"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListHITsInput, ListHITsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListHITsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListHITsInput, ListHITsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListHITsOutput>())
@@ -1979,7 +2222,7 @@ extension MTurkClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListHITsForQualificationTypeOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListHITsForQualificationTypeInput, ListHITsForQualificationTypeOutput>(xAmzTarget: "MTurkRequesterServiceV20170117.ListHITsForQualificationType"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListHITsForQualificationTypeInput, ListHITsForQualificationTypeOutput>(overrides: ["X-Amz-Target": "MTurkRequesterServiceV20170117.ListHITsForQualificationType"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListHITsForQualificationTypeInput, ListHITsForQualificationTypeOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListHITsForQualificationTypeInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListHITsForQualificationTypeInput, ListHITsForQualificationTypeOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListHITsForQualificationTypeOutput>())
@@ -2049,7 +2292,7 @@ extension MTurkClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListQualificationRequestsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListQualificationRequestsInput, ListQualificationRequestsOutput>(xAmzTarget: "MTurkRequesterServiceV20170117.ListQualificationRequests"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListQualificationRequestsInput, ListQualificationRequestsOutput>(overrides: ["X-Amz-Target": "MTurkRequesterServiceV20170117.ListQualificationRequests"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListQualificationRequestsInput, ListQualificationRequestsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListQualificationRequestsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListQualificationRequestsInput, ListQualificationRequestsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListQualificationRequestsOutput>())
@@ -2119,7 +2362,7 @@ extension MTurkClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListQualificationTypesOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListQualificationTypesInput, ListQualificationTypesOutput>(xAmzTarget: "MTurkRequesterServiceV20170117.ListQualificationTypes"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListQualificationTypesInput, ListQualificationTypesOutput>(overrides: ["X-Amz-Target": "MTurkRequesterServiceV20170117.ListQualificationTypes"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListQualificationTypesInput, ListQualificationTypesOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListQualificationTypesInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListQualificationTypesInput, ListQualificationTypesOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListQualificationTypesOutput>())
@@ -2189,7 +2432,7 @@ extension MTurkClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListReviewPolicyResultsForHITOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListReviewPolicyResultsForHITInput, ListReviewPolicyResultsForHITOutput>(xAmzTarget: "MTurkRequesterServiceV20170117.ListReviewPolicyResultsForHIT"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListReviewPolicyResultsForHITInput, ListReviewPolicyResultsForHITOutput>(overrides: ["X-Amz-Target": "MTurkRequesterServiceV20170117.ListReviewPolicyResultsForHIT"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListReviewPolicyResultsForHITInput, ListReviewPolicyResultsForHITOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListReviewPolicyResultsForHITInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListReviewPolicyResultsForHITInput, ListReviewPolicyResultsForHITOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListReviewPolicyResultsForHITOutput>())
@@ -2259,7 +2502,7 @@ extension MTurkClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListReviewableHITsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListReviewableHITsInput, ListReviewableHITsOutput>(xAmzTarget: "MTurkRequesterServiceV20170117.ListReviewableHITs"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListReviewableHITsInput, ListReviewableHITsOutput>(overrides: ["X-Amz-Target": "MTurkRequesterServiceV20170117.ListReviewableHITs"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListReviewableHITsInput, ListReviewableHITsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListReviewableHITsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListReviewableHITsInput, ListReviewableHITsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListReviewableHITsOutput>())
@@ -2329,7 +2572,7 @@ extension MTurkClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListWorkerBlocksOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListWorkerBlocksInput, ListWorkerBlocksOutput>(xAmzTarget: "MTurkRequesterServiceV20170117.ListWorkerBlocks"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListWorkerBlocksInput, ListWorkerBlocksOutput>(overrides: ["X-Amz-Target": "MTurkRequesterServiceV20170117.ListWorkerBlocks"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListWorkerBlocksInput, ListWorkerBlocksOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListWorkerBlocksInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListWorkerBlocksInput, ListWorkerBlocksOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListWorkerBlocksOutput>())
@@ -2399,7 +2642,7 @@ extension MTurkClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<ListWorkersWithQualificationTypeOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<ListWorkersWithQualificationTypeInput, ListWorkersWithQualificationTypeOutput>(xAmzTarget: "MTurkRequesterServiceV20170117.ListWorkersWithQualificationType"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<ListWorkersWithQualificationTypeInput, ListWorkersWithQualificationTypeOutput>(overrides: ["X-Amz-Target": "MTurkRequesterServiceV20170117.ListWorkersWithQualificationType"]))
         builder.serialize(ClientRuntime.BodyMiddleware<ListWorkersWithQualificationTypeInput, ListWorkersWithQualificationTypeOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: ListWorkersWithQualificationTypeInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<ListWorkersWithQualificationTypeInput, ListWorkersWithQualificationTypeOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<ListWorkersWithQualificationTypeOutput>())
@@ -2469,7 +2712,7 @@ extension MTurkClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<NotifyWorkersOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<NotifyWorkersInput, NotifyWorkersOutput>(xAmzTarget: "MTurkRequesterServiceV20170117.NotifyWorkers"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<NotifyWorkersInput, NotifyWorkersOutput>(overrides: ["X-Amz-Target": "MTurkRequesterServiceV20170117.NotifyWorkers"]))
         builder.serialize(ClientRuntime.BodyMiddleware<NotifyWorkersInput, NotifyWorkersOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: NotifyWorkersInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<NotifyWorkersInput, NotifyWorkersOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<NotifyWorkersOutput>())
@@ -2539,7 +2782,7 @@ extension MTurkClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<RejectAssignmentOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<RejectAssignmentInput, RejectAssignmentOutput>(xAmzTarget: "MTurkRequesterServiceV20170117.RejectAssignment"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<RejectAssignmentInput, RejectAssignmentOutput>(overrides: ["X-Amz-Target": "MTurkRequesterServiceV20170117.RejectAssignment"]))
         builder.serialize(ClientRuntime.BodyMiddleware<RejectAssignmentInput, RejectAssignmentOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: RejectAssignmentInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<RejectAssignmentInput, RejectAssignmentOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<RejectAssignmentOutput>())
@@ -2609,7 +2852,7 @@ extension MTurkClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<RejectQualificationRequestOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<RejectQualificationRequestInput, RejectQualificationRequestOutput>(xAmzTarget: "MTurkRequesterServiceV20170117.RejectQualificationRequest"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<RejectQualificationRequestInput, RejectQualificationRequestOutput>(overrides: ["X-Amz-Target": "MTurkRequesterServiceV20170117.RejectQualificationRequest"]))
         builder.serialize(ClientRuntime.BodyMiddleware<RejectQualificationRequestInput, RejectQualificationRequestOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: RejectQualificationRequestInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<RejectQualificationRequestInput, RejectQualificationRequestOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<RejectQualificationRequestOutput>())
@@ -2679,7 +2922,7 @@ extension MTurkClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<SendBonusOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<SendBonusInput, SendBonusOutput>(xAmzTarget: "MTurkRequesterServiceV20170117.SendBonus"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<SendBonusInput, SendBonusOutput>(overrides: ["X-Amz-Target": "MTurkRequesterServiceV20170117.SendBonus"]))
         builder.serialize(ClientRuntime.BodyMiddleware<SendBonusInput, SendBonusOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: SendBonusInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<SendBonusInput, SendBonusOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<SendBonusOutput>())
@@ -2749,7 +2992,7 @@ extension MTurkClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<SendTestEventNotificationOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<SendTestEventNotificationInput, SendTestEventNotificationOutput>(xAmzTarget: "MTurkRequesterServiceV20170117.SendTestEventNotification"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<SendTestEventNotificationInput, SendTestEventNotificationOutput>(overrides: ["X-Amz-Target": "MTurkRequesterServiceV20170117.SendTestEventNotification"]))
         builder.serialize(ClientRuntime.BodyMiddleware<SendTestEventNotificationInput, SendTestEventNotificationOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: SendTestEventNotificationInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<SendTestEventNotificationInput, SendTestEventNotificationOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<SendTestEventNotificationOutput>())
@@ -2819,7 +3062,7 @@ extension MTurkClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateExpirationForHITOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateExpirationForHITInput, UpdateExpirationForHITOutput>(xAmzTarget: "MTurkRequesterServiceV20170117.UpdateExpirationForHIT"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateExpirationForHITInput, UpdateExpirationForHITOutput>(overrides: ["X-Amz-Target": "MTurkRequesterServiceV20170117.UpdateExpirationForHIT"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateExpirationForHITInput, UpdateExpirationForHITOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateExpirationForHITInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateExpirationForHITInput, UpdateExpirationForHITOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateExpirationForHITOutput>())
@@ -2889,7 +3132,7 @@ extension MTurkClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateHITReviewStatusOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateHITReviewStatusInput, UpdateHITReviewStatusOutput>(xAmzTarget: "MTurkRequesterServiceV20170117.UpdateHITReviewStatus"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateHITReviewStatusInput, UpdateHITReviewStatusOutput>(overrides: ["X-Amz-Target": "MTurkRequesterServiceV20170117.UpdateHITReviewStatus"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateHITReviewStatusInput, UpdateHITReviewStatusOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateHITReviewStatusInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateHITReviewStatusInput, UpdateHITReviewStatusOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateHITReviewStatusOutput>())
@@ -2959,7 +3202,7 @@ extension MTurkClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateHITTypeOfHITOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateHITTypeOfHITInput, UpdateHITTypeOfHITOutput>(xAmzTarget: "MTurkRequesterServiceV20170117.UpdateHITTypeOfHIT"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateHITTypeOfHITInput, UpdateHITTypeOfHITOutput>(overrides: ["X-Amz-Target": "MTurkRequesterServiceV20170117.UpdateHITTypeOfHIT"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateHITTypeOfHITInput, UpdateHITTypeOfHITOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateHITTypeOfHITInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateHITTypeOfHITInput, UpdateHITTypeOfHITOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateHITTypeOfHITOutput>())
@@ -3029,7 +3272,7 @@ extension MTurkClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateNotificationSettingsOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateNotificationSettingsInput, UpdateNotificationSettingsOutput>(xAmzTarget: "MTurkRequesterServiceV20170117.UpdateNotificationSettings"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateNotificationSettingsInput, UpdateNotificationSettingsOutput>(overrides: ["X-Amz-Target": "MTurkRequesterServiceV20170117.UpdateNotificationSettings"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateNotificationSettingsInput, UpdateNotificationSettingsOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateNotificationSettingsInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateNotificationSettingsInput, UpdateNotificationSettingsOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateNotificationSettingsOutput>())
@@ -3099,7 +3342,7 @@ extension MTurkClient {
             EndpointParams(endpoint: configuredEndpoint, region: config.region, useDualStack: config.useDualStack ?? false, useFIPS: config.useFIPS ?? false)
         }
         builder.applyEndpoint(AWSClientRuntime.AWSEndpointResolverMiddleware<UpdateQualificationTypeOutput, EndpointParams>(paramsBlock: endpointParamsBlock, resolverBlock: { [config] in try config.endpointResolver.resolve(params: $0) }))
-        builder.interceptors.add(AWSClientRuntime.XAmzTargetMiddleware<UpdateQualificationTypeInput, UpdateQualificationTypeOutput>(xAmzTarget: "MTurkRequesterServiceV20170117.UpdateQualificationType"))
+        builder.interceptors.add(ClientRuntime.MutateHeadersMiddleware<UpdateQualificationTypeInput, UpdateQualificationTypeOutput>(overrides: ["X-Amz-Target": "MTurkRequesterServiceV20170117.UpdateQualificationType"]))
         builder.serialize(ClientRuntime.BodyMiddleware<UpdateQualificationTypeInput, UpdateQualificationTypeOutput, SmithyJSON.Writer>(rootNodeInfo: "", inputWritingClosure: UpdateQualificationTypeInput.write(value:to:)))
         builder.interceptors.add(ClientRuntime.ContentTypeMiddleware<UpdateQualificationTypeInput, UpdateQualificationTypeOutput>(contentType: "application/x-amz-json-1.1"))
         builder.selectAuthScheme(ClientRuntime.AuthSchemeMiddleware<UpdateQualificationTypeOutput>())
