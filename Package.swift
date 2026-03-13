@@ -2227,19 +2227,19 @@ private var dependencies: [Package.Dependency] {
 private var smithySwiftDependency: Package.Dependency {
     let previewPath = "./smithy-swift"
     let developmentPath = "../smithy-swift"
-    let gitURL = "https://github.com/smithy-lang/smithy-swift"
+    let gitURL = "https://github.com/gevartosky/smithy-swift"
     let useLocalDeps = ProcessInfo.processInfo.environment["AWS_SWIFT_SDK_USE_LOCAL_DEPS"] != nil
     if isPreviewBuild {
         return .package(path: previewPath)
     } else if useLocalDeps {
         return .package(path: developmentPath)
     } else {
-        return .package(url: gitURL, exact: clientRuntimeVersion)
+       return .package(url: gitURL, exact: clientRuntimeVersion)
     }
 }
 
 private var crtDependency: Package.Dependency {
-    .package(url: "https://github.com/awslabs/aws-crt-swift", exact: crtVersion)
+   .package(url: "https://github.com/gevartosky/aws-crt-swift", exact: crtVersion)
 }
 
 private var doccDependencyOrNil: Package.Dependency? {
